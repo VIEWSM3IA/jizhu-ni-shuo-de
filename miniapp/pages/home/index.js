@@ -1,7 +1,7 @@
 const { request, track } = require('../../services/api');
 const { formatDate } = require('../../services/util');
 Page({
-  data: { items: [], visible: [], filter: 'ALL', loading: true, error: '', creating: false, createBusy: false, createError: '', alias: '', nextCursor: null, moreBusy: false },
+  data: { items: [], visible: [], filter: 'ALL', loading: true, error: '', creating: false, createBusy: false, createError: '', alias: '', nextCursor: null, moreBusy: false, summary: { due_count: 0, upcoming_24h_count: 0 } },
   onLoad(options) { if (options.create === '1') this.openCreate(); },
   onShow() { this.setData({ alias: getApp().globalData.lastAlias || '' }); this.load(); track('home_view'); },
   onPullDownRefresh() { this.load().finally(() => wx.stopPullDownRefresh()); },
@@ -9,7 +9,7 @@ Page({
     this.setData({ loading: !this.data.items.length, error: '' });
     try {
       const data = await request(`/v1/me/capsules?state=${this.data.filter}`);
-      this.setData({ items: data.items.map(this.decorate), nextCursor: data.next_cursor, loading: false });
+      this.setData({ items: data.items.map(this.decorate), nextCursor: data.next_cursor, summary: data.summary || this.data.summary, loading: false });
       this.applyFilter();
     } catch (error) { this.setData({ loading: false, error: error.message || '加载失败，请重试。' }); }
   },
@@ -22,12 +22,13 @@ Page({
     this.setData({ visible: this.data.items.filter(x => f === 'ALL' || x.state === (f === 'ACTIVE' ? 'SEALED' : f)) });
   },
   filterTap(e) { this.setData({ filter: e.currentTarget.dataset.filter, items: [], visible: [] }); this.load(); },
+  dueBannerTap() { this.setData({ filter: 'DUE', items: [], visible: [] }, () => this.load()); },
   async loadMore() {
     if (!this.data.nextCursor || this.data.moreBusy) return;
     this.setData({ moreBusy: true });
     try {
       const data = await request(`/v1/me/capsules?state=${this.data.filter}&cursor=${encodeURIComponent(this.data.nextCursor)}`);
-      this.setData({ items: this.data.items.concat(data.items.map(this.decorate)), nextCursor: data.next_cursor });
+      this.setData({ items: this.data.items.concat(data.items.map(this.decorate)), nextCursor: data.next_cursor, summary: data.summary || this.data.summary });
       this.applyFilter();
     } catch (error) { this.setData({ error: error.message || '加载失败，请重试。' }); }
     finally { this.setData({ moreBusy: false }); }

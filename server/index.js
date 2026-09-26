@@ -2,6 +2,7 @@ const http = require('node:http');
 const { Pool } = require('pg');
 const { createService, ApiError } = require('./service');
 const { createWechat } = require('./wechat');
+const { createReminderWorker } = require('./reminders/worker');
 
 function createHandler(service, exchangeCode) {
   return async (req, res) => {
@@ -27,7 +28,7 @@ function createHandler(service, exchangeCode) {
       if (url.pathname === '/v1/capsules' && req.method === 'POST') return send(201, await service.create(user, body));
       if (url.pathname === '/v1/me/capsules' && req.method === 'GET') return send(200, await service.list(user, Object.fromEntries(url.searchParams)));
       if (url.pathname === '/v1/events' && req.method === 'POST') return send(200, await service.event(user, body));
-      const match = /^\/v1\/capsules\/([^/]+)(?:\/(stances|open|reports))?$/.exec(url.pathname);
+      const match = /^\/v1\/capsules\/([^/]+)(?:\/(stances|open|reports|reminder))?$/.exec(url.pathname);
       if (!match) throw new ApiError(404, 'NOT_FOUND', '接口不存在。');
       const [, id, action] = match;
       if (!action && req.method === 'GET') return send(200, await service.detail(id, user));
@@ -35,6 +36,8 @@ function createHandler(service, exchangeCode) {
       if (action === 'stances' && req.method === 'POST') return send(200, await service.stance(id, user, body));
       if (action === 'open' && req.method === 'POST') return send(200, await service.open(id, user));
       if (action === 'reports' && req.method === 'POST') return send(200, await service.report(id, user));
+      if (action === 'reminder' && req.method === 'POST') return send(200, await service.armReminder(id, user, body));
+      if (action === 'reminder' && req.method === 'DELETE') return send(200, await service.cancelReminder(id, user));
       throw new ApiError(404, 'NOT_FOUND', '接口不存在。');
     } catch (error) {
       if (error instanceof ApiError) return send(error.status, { error: { code: error.code, message: error.message } });
@@ -49,6 +52,13 @@ if (require.main === module) {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const wechat = createWechat();
   const service = createService(pool, { checkContent: wechat.checkContent });
+  if (process.env.REMINDER_WORKER_ENABLED === 'true') {
+    const configured = Number(process.env.REMINDER_POLL_MS || 30000);
+    const pollMs = Math.min(300000, Math.max(1000, Number.isFinite(configured) ? configured : 30000));
+    const worker = createReminderWorker(pool, { send: wechat.sendReminder });
+    worker.tick().catch(error => console.error('reminder worker tick failed', error.code || error.name));
+    worker.start(pollMs);
+  }
   http.createServer(createHandler(service, wechat.exchangeCode)).listen(Number(process.env.PORT || 3000), () => console.log('API listening'));
 }
 module.exports = { createHandler };

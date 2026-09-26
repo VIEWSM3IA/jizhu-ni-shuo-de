@@ -1,11 +1,14 @@
 const { request, track } = require('../../services/api');
 const { formatDate, shareTitle } = require('../../services/util');
 const { dueRefreshDelay } = require('../../services/time');
+const { reminderTemplateId } = require('../../config');
 Page({
-  data: { id: '', capsule: null, loading: true, busy: false, error: '', aliasOpen: false, aliasError: '', pendingStance: '', entry: 'direct', canGoBack: false },
+  data: { id: '', capsule: null, loading: true, busy: false, error: '', aliasOpen: false, aliasError: '', pendingStance: '', entry: 'direct', canGoBack: false, reminderBusy: false, reminderUI: null },
   onLoad(options) {
     this.pageVisible = true;
-    this.setData({ id: options.id || '', entry: getCurrentPages().length === 1 ? 'share' : 'home', canGoBack: getCurrentPages().length > 1 });
+    const entry = options.src === 'reminder' ? 'reminder' : getCurrentPages().length === 1 ? 'share' : 'home';
+    this.setData({ id: options.id || '', entry, canGoBack: getCurrentPages().length > 1 });
+    if (entry === 'reminder') track('reminder_entry_view', { capsule_id: this.data.id, entry_source: 'reminder' });
     this.load();
   },
   onShow() {
@@ -46,7 +49,7 @@ Page({
       c.timeText = c.opens_at ? formatDate(c.opens_at) : '';
       if (c.results) c.results = c.results.map(r => ({ ...r, avatar: [...r.alias][0], label: r.stance === 'agree' ? '同意' : '反对' }));
       this.lastLoaded = Date.now();
-      this.setData({ capsule: c, loading: false });
+      this.setData({ capsule: c, reminderUI: this.deriveReminderUI(c), loading: false });
       this.scheduleDueRefresh();
       track('capsule_view', { capsule_id: c.id, capsule_state: c.state, entry_source: this.data.entry });
       if (c.state === 'DUE') track('due_view', { capsule_id: c.id });
@@ -57,6 +60,85 @@ Page({
         this.scheduleDueRetry();
       }
     }
+  },
+  deriveReminderUI(c) {
+    const r = c?.viewer?.reminder || {};
+    const key = 'reminder_grant:' + this.data.id;
+    const grant = wx.getStorageSync(key);
+    const serverState = r.state || 'none';
+    if (!r.eligible || serverState === 'armed' || serverState === 'sent') {
+      if (grant) { try { wx.removeStorageSync(key); } catch {} }
+      return { eligible: !!r.eligible, state: serverState, configured: !!reminderTemplateId };
+    }
+    const validGrant = serverState === 'none' && r.eligible === true && grant &&
+      grant.template_id === reminderTemplateId && Number.isFinite(grant.granted_at);
+    if (grant && !validGrant) { try { wx.removeStorageSync(key); } catch {} }
+    if (r.eligible && !validGrant && reminderTemplateId && !this._reminderCtaViewed) {
+      this._reminderCtaViewed = true;
+      track('reminder_cta_view', { capsule_id: this.data.id });
+    }
+    return { eligible: true, state: validGrant ? 'pending' : serverState, configured: !!reminderTemplateId };
+  },
+  async requestReminder() {
+    if (this.data.reminderBusy || !reminderTemplateId || !this.data.reminderUI?.eligible || this.data.reminderUI.state !== 'none') return;
+    this.setData({ reminderBusy: true });
+    track('reminder_cta_tap', { capsule_id: this.data.id });
+    let result;
+    try {
+      result = await new Promise((resolve, reject) => wx.requestSubscribeMessage({ tmplIds: [reminderTemplateId], success: resolve, fail: reject }));
+    } catch {
+      track('reminder_permission_result', { capsule_id: this.data.id, permission_result: 'error' });
+      wx.showToast({ title: '订阅请求失败，请稍后重试', icon: 'none' });
+      this.setData({ reminderBusy: false });
+      return;
+    }
+    const permission = result?.[reminderTemplateId] || 'error';
+    track('reminder_permission_result', { capsule_id: this.data.id, permission_result: ['accept', 'acceptWithAudio', 'reject', 'ban', 'filter'].includes(permission) ? permission : 'error' });
+    if (permission !== 'accept' && permission !== 'acceptWithAudio') {
+      const messages = { reject: '没关系，到期后也可以从首页回来开封', ban: '请在微信设置中开启订阅消息权限', filter: '该提醒暂时不可订阅' };
+      wx.showToast({ title: messages[permission] || '未能开启提醒', icon: 'none' });
+      this.setData({ reminderBusy: false });
+      return;
+    }
+    try { wx.setStorageSync('reminder_grant:' + this.data.id, { template_id: reminderTemplateId, granted_at: Date.now() }); }
+    catch { /* Permission was accepted; still use it for this server request. */ }
+    this.setData({ reminderUI: { eligible: true, state: 'pending', configured: true } });
+    await this.retryReminder(true);
+    this.setData({ reminderBusy: false });
+  },
+  async retryReminder(fromGrant) {
+    const inheritedBusy = fromGrant === true;
+    if (!reminderTemplateId || !this.data.reminderUI?.eligible || this.data.reminderUI.state !== 'pending') return;
+    if (!inheritedBusy) {
+      if (this.data.reminderBusy) return;
+      this.setData({ reminderBusy: true });
+      track('reminder_arm_retry', { capsule_id: this.data.id });
+    }
+    const timezone = Math.max(-720, Math.min(840, -new Date().getTimezoneOffset()));
+    try {
+      await request('/v1/capsules/' + this.data.id + '/reminder', 'POST', { template_id: reminderTemplateId, timezone_offset_minutes: timezone });
+      try { wx.removeStorageSync('reminder_grant:' + this.data.id); } catch {}
+      track('reminder_arm_success', { capsule_id: this.data.id });
+      await this.load(true, true);
+      wx.showToast({ title: '到期时会提醒你', icon: 'none' });
+    } catch {
+      this.setData({ reminderUI: { eligible: true, state: 'pending', configured: true } });
+      wx.showToast({ title: '提醒保存失败，可点击重试', icon: 'none' });
+    } finally { if (!inheritedBusy) this.setData({ reminderBusy: false }); }
+  },
+  cancelReminder() {
+    if (this.data.reminderBusy) return;
+    wx.showModal({ title: '取消这次到期提醒？', success: async ({ confirm }) => {
+      if (!confirm) return;
+      this.setData({ reminderBusy: true });
+      try {
+        await request('/v1/capsules/' + this.data.id + '/reminder', 'DELETE');
+        wx.removeStorageSync('reminder_grant:' + this.data.id);
+        track('reminder_cancel', { capsule_id: this.data.id });
+        await this.load(true, true);
+      } catch { wx.showToast({ title: '取消失败，请稍后重试', icon: 'none' }); }
+      finally { this.setData({ reminderBusy: false }); }
+    } });
   },
   async choose(e) {
     if (this.data.busy) return;

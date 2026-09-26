@@ -122,3 +122,212 @@ test('mutation refresh waits for an older detail GET then fetches again', async 
   await Promise.all([oldGet, afterMutation]);
   assert.equal(calls, 2);
 });
+
+test('detail reminder grant persists across retry and reject never posts', async () => {
+  const apiPath = require.resolve('../miniapp/services/api');
+  const detailPath = require.resolve('../miniapp/pages/capsule/detail.js');
+  const configPath = require.resolve('../miniapp/config');
+  require(apiPath);
+  const config = require(configPath);
+  const oldApi = require.cache[apiPath].exports;
+  const oldTemplate = config.reminderTemplateId;
+  const oldPage = global.Page;
+  const oldWx = global.wx;
+  const store = new Map();
+  const calls = [];
+  let pageDef, subscribeResult = 'accept', subscribeFailure = false, postCount = 0, failPost = true, throwSet = false, throwRemove = false;
+
+  try {
+    require.cache[apiPath].exports = {
+      request: async (path, method, data) => {
+        calls.push(['post', store.has('reminder_grant:123e4567-e89b-42d3-a456-426614174000'), path, method, data]);
+        postCount++;
+        if (failPost) throw new Error('timeout');
+        return { reminder: { state: 'armed' } };
+      },
+      track: () => {},
+    };
+    config.reminderTemplateId = 'test-template';
+
+    global.Page = def => { pageDef = def; };
+    global.wx = {
+      requestSubscribeMessage({ tmplIds, success, fail }) {
+        calls.push(['subscribe', tmplIds]);
+        if (subscribeFailure) return fail(new Error('WeChat unavailable'));
+        success({ [tmplIds[0]]: subscribeResult });
+      },
+      getStorageSync: key => store.get(key),
+      setStorageSync(key, value) {
+        if (throwSet) throw new Error('storage unavailable');
+        calls.push(['store', key]);
+        store.set(key, value);
+      },
+      removeStorageSync(key) {
+        if (throwRemove) throw new Error('storage unavailable');
+        calls.push(['remove', key]);
+        store.delete(key);
+      },
+      showToast() {},
+      showModal() {},
+    };
+
+    delete require.cache[detailPath];
+    require(detailPath);
+
+    const makePage = () => {
+      const page = Object.assign({}, pageDef);
+      page.data = {
+        id: '123e4567-e89b-42d3-a456-426614174000',
+        reminderUI: { eligible: true, state: 'none', configured: true },
+        reminderBusy: false,
+      };
+      page.setData = patch => Object.assign(page.data, patch);
+      page.load = async () => {
+        page.data.reminderUI = { eligible: true, state: 'armed', configured: true };
+      };
+      return page;
+    };
+
+    const page = makePage();
+    assert.equal(calls.some(x => x[0] === 'subscribe'), false);
+
+    await page.requestReminder();
+    assert.equal(postCount, 1);
+    assert.equal(calls.find(x => x[0] === 'post')[1], true);
+    assert.equal(store.size, 1);
+    assert.equal(page.data.reminderUI.state, 'pending');
+
+    failPost = false;
+    const subscribeCalls = calls.filter(x => x[0] === 'subscribe').length;
+    await page.retryReminder();
+    assert.equal(postCount, 2);
+    assert.equal(calls.filter(x => x[0] === 'subscribe').length, subscribeCalls);
+    assert.equal(store.size, 0);
+    assert.equal(page.data.reminderUI.state, 'armed');
+
+    store.clear();
+    subscribeResult = 'reject';
+    const rejected = makePage();
+    const beforePosts = postCount;
+    await rejected.requestReminder();
+    assert.equal(postCount, beforePosts);
+    assert.equal(store.size, 0);
+
+    for (const permission of ['ban', 'filter']) {
+      subscribeResult = permission;
+      await makePage().requestReminder();
+      assert.equal(postCount, beforePosts);
+    }
+    subscribeFailure = true;
+    await makePage().requestReminder();
+    subscribeFailure = false;
+    assert.equal(postCount, beforePosts);
+
+    subscribeResult = 'acceptWithAudio';
+    throwSet = true;
+    const storageFailed = makePage();
+    await storageFailed.requestReminder();
+    assert.equal(postCount, beforePosts + 1);
+    assert.equal(storageFailed.data.reminderUI.state, 'armed');
+    throwSet = false;
+
+    throwRemove = true;
+    const cleanupFailed = makePage();
+    await cleanupFailed.requestReminder();
+    assert.equal(postCount, beforePosts + 2);
+    assert.equal(cleanupFailed.data.reminderUI.state, 'armed');
+    throwRemove = false;
+    const grantKey = 'reminder_grant:123e4567-e89b-42d3-a456-426614174000';
+    store.set(grantKey, { template_id: 'test-template', granted_at: Date.now() });
+    const clockAhead = makePage();
+    assert.equal(clockAhead.deriveReminderUI({ opens_at: '2000-01-01T00:00:00.000Z', viewer: { reminder: { eligible: true, state: 'none' } } }).state, 'pending');
+    assert.equal(store.has(grantKey), true);
+  } finally {
+    require.cache[apiPath].exports = oldApi;
+    config.reminderTemplateId = oldTemplate;
+    delete require.cache[detailPath];
+    if (oldPage === undefined) delete global.Page;
+    else global.Page = oldPage;
+    if (oldWx === undefined) delete global.wx;
+    else global.wx = oldWx;
+  }
+});
+
+test('detail reminder deep link recovery and home due banner', async () => {
+  const apiId = require.resolve('../miniapp/services/api');
+  const detailId = require.resolve('../miniapp/pages/capsule/detail');
+  const homeId = require.resolve('../miniapp/pages/home/index');
+  const configId = require.resolve('../miniapp/config');
+  require(apiId);
+  const oldApi = require.cache[apiId].exports;
+  const oldDetail = require.cache[detailId];
+  const oldHome = require.cache[homeId];
+  const config = require(configId);
+  const hadTpl = Object.prototype.hasOwnProperty.call(config, 'reminderTemplateId');
+  const oldTpl = config.reminderTemplateId;
+  const oldPage = global.Page, oldWx = global.wx, oldPages = global.getCurrentPages;
+  const tracks = [], saved = { template_id: 'test-template', granted_at: Date.now() };
+  let subscribed = 0, def;
+  try {
+    require.cache[apiId].exports = {
+      request: async () => ({
+        id: 'valid',
+        opens_at: new Date(Date.now() + 3600000).toISOString(),
+        state: 'SEALED',
+        viewer: { reminder: { eligible: true, state: 'none' } }
+      }),
+      track: name => tracks.push(name)
+    };
+    config.reminderTemplateId = 'test-template';
+    global.Page = x => { def = x; };
+    global.getCurrentPages = () => [{}];
+    global.wx = {
+      getStorageSync: () => saved,
+      setStorageSync() {},
+      removeStorageSync() {},
+      requestSubscribeMessage() { subscribed++; },
+      showToast() {},
+      showModal() {}
+    };
+
+    delete require.cache[detailId];
+    require(detailId);
+    const detail = Object.assign({}, def, {
+      data: JSON.parse(JSON.stringify(def.data)),
+      setData(v, cb) { Object.assign(this.data, v); if (cb) cb(); }
+    });
+    detail.onLoad({ id: 'valid', src: 'reminder' });
+    if (detail.loadPromise) await detail.loadPromise;
+    assert.equal(detail.data.entry, 'reminder');
+    assert.equal(detail.data.reminderUI.state, 'pending');
+    assert.ok(tracks.includes('reminder_entry_view'));
+    assert.equal(subscribed, 0);
+    if (detail.onUnload) detail.onUnload();
+
+    def = null;
+    delete require.cache[homeId];
+    require(homeId);
+    const home = Object.assign({}, def, {
+      data: { ...def.data, summary: { due_count: 2, upcoming_24h_count: 0 } },
+      setData(v, cb) { Object.assign(this.data, v); if (cb) cb(); }
+    });
+    let loadedFilter;
+    home.load = function () { loadedFilter = this.data.filter; };
+    home.dueBannerTap();
+    assert.equal(home.data.filter, 'DUE');
+    assert.deepEqual(home.data.items, []);
+    assert.deepEqual(home.data.visible, []);
+    assert.equal(loadedFilter, 'DUE');
+  } finally {
+    require.cache[apiId].exports = oldApi;
+    delete require.cache[detailId];
+    delete require.cache[homeId];
+    if (oldDetail) require.cache[detailId] = oldDetail;
+    if (oldHome) require.cache[homeId] = oldHome;
+    if (hadTpl) config.reminderTemplateId = oldTpl;
+    else delete config.reminderTemplateId;
+    global.Page = oldPage;
+    global.wx = oldWx;
+    global.getCurrentPages = oldPages;
+  }
+});
