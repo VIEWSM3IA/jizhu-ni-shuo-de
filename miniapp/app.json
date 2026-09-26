@@ -1,0 +1,12 @@
+{
+  "pages": ["pages/home/index", "pages/capsule/detail"],
+  "window": {
+    "navigationBarTitleText": "记住你说的",
+    "navigationBarBackgroundColor": "#f4f5f7",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f4f5f7",
+    "backgroundTextStyle": "light"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

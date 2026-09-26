@@ -1,0 +1,16 @@
+.overlay { position: fixed; inset: 0; z-index: 10; background: rgba(8,10,14,.26); display: flex; align-items: flex-end; }
+.sheet { box-sizing: border-box; width: 100%; max-height: 92vh; overflow-y: auto; background: rgba(250,250,251,.97); border-radius: 64rpx 64rpx 0 0; padding: 20rpx 36rpx calc(36rpx + env(safe-area-inset-bottom)); }
+.grabber { width: 76rpx; height: 10rpx; background: #d1d3d7; border-radius: 10rpx; margin: 0 auto 30rpx; }
+.title { font-size: 46rpx; font-weight: 750; margin-bottom: 28rpx; }
+.field { background: #fff; border: 1rpx solid #eeeeef; border-radius: 36rpx; padding: 24rpx 28rpx; margin-bottom: 18rpx; font-size: 30rpx; }
+.label { font-size: 23rpx; color: #8b8f96; margin-bottom: 12rpx; }
+.statement-input { box-sizing: border-box; width: 100%; height: 152rpx; font-size: 40rpx; font-weight: 650; }
+.count { text-align: right; color: #a0a3aa; font-size: 22rpx; }
+.quick { white-space: nowrap; margin-bottom: 18rpx; }.quick-row { display: flex; gap: 12rpx; }.quick button { display: inline-block; flex-shrink: 0; margin: 0; padding: 0 20rpx; height: 64rpx; line-height: 64rpx; border-radius: 100rpx; background: #e8e9ec; color: #555a62; font-size: 24rpx; }.quick .active { background: #191a1d; color: #fff; }
+.picker-row { display: flex; gap: 16rpx; margin-bottom: 16rpx; }.picker { padding: 16rpx 24rpx; border-radius: 20rpx; background: #e8e9ec; font-size: 26rpx; }
+.fine { text-align: center; color: #969aa1; font-size: 22rpx; margin-top: 16rpx; }
+.overlay { animation: scrimIn 260ms cubic-bezier(.23,1,.32,1) both; }.sheet { animation: sheetUp 260ms cubic-bezier(.32,.72,0,1) both; }
+.overlay.closing { animation: scrimOut 200ms cubic-bezier(.23,1,.32,1) both; }.overlay.closing .sheet { animation: sheetDown 200ms cubic-bezier(.32,.72,0,1) both; }
+@keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } } @keyframes scrimOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } } @keyframes sheetDown { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@media (prefers-reduced-motion: reduce) { .sheet, .overlay.closing .sheet { animation: none; } }

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>记住你说的 · V0.1 微信小程序原型</title>
+<style>
+  :root{
+    --bg:#f4f5f7;
+    --surface:#ffffff;
+    --surface-2:#f0f1f4;
+    --text:#121316;
+    --muted:#7b7f87;
+    --hair:rgba(18,19,22,.075);
+    --shadow:0 20px 60px rgba(18,19,22,.10),0 2px 12px rgba(18,19,22,.05);
+    --black:#111215;
+    --agree:#2f6feb;
+    --disagree:#d85b50;
+    --success:#24855a;
+    --r-card:26px;
+    --r-control:18px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;color:var(--text);background:#e9eaed}
+  button,input,textarea{font:inherit}
+  button{border:0}
+  .stage{min-height:100vh;display:grid;place-items:center;padding:28px 18px 110px;background:radial-gradient(circle at 50% 0,#f8f8fa 0,#e8e9ec 56%,#e4e5e8 100%)}
+  .phone{width:min(430px,100%);height:min(890px,calc(100vh - 140px));min-height:690px;background:var(--bg);border-radius:42px;overflow:hidden;box-shadow:0 35px 90px rgba(20,22,27,.20),inset 0 0 0 1px rgba(0,0,0,.06);position:relative}
+  .screen{height:100%;overflow:hidden;position:relative;background:linear-gradient(180deg,#fafafa 0,#f5f6f8 20%,#f3f4f6 100%)}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 19px 7px;font-size:13px;font-weight:700;letter-spacing:.2px}
+  .status-icons{display:flex;align-items:center;gap:6px;color:#222}
+  .wifi{width:15px;height:10px;border-top:2px solid;border-radius:50%}
+  .battery{width:21px;height:10px;border:1.7px solid;border-radius:3px;position:relative}.battery:after{content:"";position:absolute;right:-3px;top:2px;width:2px;height:4px;background:currentColor;border-radius:0 1px 1px 0}.battery i{display:block;width:13px;height:5px;margin:1px;background:currentColor;border-radius:1px}
+  .wx-top{height:42px;display:flex;align-items:center;padding:0 14px 0 18px;position:relative;z-index:5}
+  .back{width:36px;height:36px;border-radius:18px;background:transparent;display:grid;place-items:center;color:#111;font-size:27px;line-height:1;cursor:pointer}
+  .mini-capsule{margin-left:auto;width:88px;height:32px;border-radius:18px;border:1px solid rgba(0,0,0,.10);background:rgba(255,255,255,.62);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:space-evenly;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+  .dots{letter-spacing:2px;font-weight:800;margin-top:-5px}.divider{width:1px;height:18px;background:rgba(0,0,0,.1)}.circle{width:13px;height:13px;border:2px solid #111;border-radius:50%;position:relative}.circle:after{content:"";position:absolute;width:3px;height:3px;background:#111;border-radius:50%;top:3px;left:3px}
+  .content{height:calc(100% - 96px);overflow:auto;padding:9px 18px 126px;scrollbar-width:none}.content::-webkit-scrollbar{display:none}
+  .hero-title{font-size:34px;line-height:1.05;letter-spacing:-1.3px;margin:12px 0 7px;font-weight:760}.hero-sub{font-size:15px;color:var(--muted);margin:0 0 22px}
+  .chips{display:flex;gap:8px;overflow:auto;margin:0 -18px 18px;padding:0 18px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}.chip{white-space:nowrap;padding:8px 13px;border-radius:999px;background:transparent;color:#6f737b;font-size:14px;font-weight:600;cursor:pointer}.chip.active{background:#e7e8eb;color:#111}
+  .list{display:flex;flex-direction:column;gap:12px}
+  .card{background:rgba(255,255,255,.94);border:1px solid rgba(0,0,0,.045);border-radius:var(--r-card);padding:18px 18px 16px;box-shadow:0 1px 0 rgba(255,255,255,.9),0 6px 20px rgba(20,22,27,.035);cursor:pointer;transition:transform .12s ease}.card:active{transform:scale(.985)}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}.state-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;background:#f0f1f3;color:#555b64;font-size:12px;font-weight:700}.state-pill.due{background:#fff0dc;color:#975d00}.state-pill.opened{background:#eaf5ef;color:#24714e}
+  .role{font-size:12px;color:#a0a3aa}.statement-sm{font-size:19px;line-height:1.35;font-weight:700;letter-spacing:-.25px;margin:13px 0 15px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.meta{font-size:13px;color:#858991}
+  .bottom-glass{position:absolute;left:0;right:0;bottom:0;padding:14px 18px calc(16px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(244,245,247,0) 0,rgba(244,245,247,.78) 23%,rgba(244,245,247,.95) 52%,rgba(244,245,247,.98) 100%);z-index:8}.primary{width:100%;height:56px;border-radius:20px;background:var(--black);color:white;font-size:17px;font-weight:720;box-shadow:0 10px 30px rgba(0,0,0,.18);cursor:pointer;transition:transform .11s ease,opacity .2s}.primary:active{transform:scale(.985)}.secondary{width:100%;height:52px;border-radius:18px;background:#e9eaed;color:#111;font-size:16px;font-weight:700;cursor:pointer}.ghost{background:transparent;color:#6f737b;font-size:14px;padding:12px;cursor:pointer}
+  .detail-head{padding:18px 3px 0}.eyebrow{font-size:13px;color:#777c84;font-weight:700;display:flex;align-items:center;gap:7px}.eyebrow .lock{width:21px;height:21px;border-radius:8px;background:#e8e9ec;display:grid;place-items:center;font-size:11px}.creator{font-size:16px;color:#575c64;margin:21px 0 9px}.statement{font-size:31px;line-height:1.2;font-weight:760;letter-spacing:-1px;margin:0 0 23px}.open-time{display:flex;align-items:center;gap:9px;color:#727780;font-size:14px}.divider-line{height:1px;background:var(--hair);margin:28px 0 24px}.count{font-size:16px;font-weight:700}.hint{font-size:13px;color:#8c9097;margin-top:8px;line-height:1.5}
+  .choice-bar{display:grid;grid-template-columns:1fr 1fr;gap:10px}.choice{height:56px;border-radius:20px;background:#fff;border:1px solid rgba(0,0,0,.07);font-size:16px;font-weight:750;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.04)}.choice:active{transform:scale(.985)}
+  .sealed-card{padding:18px;border-radius:24px;background:rgba(255,255,255,.94);border:1px solid rgba(0,0,0,.04);display:flex;gap:13px;align-items:flex-start}.seal-icon{width:36px;height:36px;border-radius:14px;background:#eaf5ef;color:var(--success);display:grid;place-items:center;font-weight:900}.sealed-title{font-size:16px;font-weight:760;margin:1px 0 4px}.sealed-sub{font-size:13px;color:#7d828a;line-height:1.45}
+  .due-mark{display:inline-flex;padding:7px 10px;border-radius:999px;background:#fff0dc;color:#995f00;font-size:13px;font-weight:750}.due-title{font-size:26px;font-weight:780;margin:17px 0 6px}.due-copy{font-size:14px;color:#777c84}
+  .results{display:flex;flex-direction:column;gap:10px;margin-top:18px}.result{display:flex;align-items:center;padding:15px 16px;border-radius:21px;background:#fff;border:1px solid rgba(0,0,0,.04)}.avatar{width:34px;height:34px;border-radius:13px;background:#efeff2;display:grid;place-items:center;font-size:13px;font-weight:780;margin-right:12px}.person{font-size:15px;font-weight:720}.badge{font-size:11px;color:#8d9198;margin-left:6px}.stance{margin-left:auto;font-size:14px;font-weight:760;padding:7px 10px;border-radius:11px}.stance.agree{background:#edf3ff;color:#2e67c7}.stance.disagree{background:#fff0ee;color:#b64e45}
+  .sheet-wrap{position:absolute;inset:0;z-index:30;display:none}.sheet-wrap.show{display:block}.scrim{position:absolute;inset:0;background:rgba(8,10,14,.26);animation:fade .18s ease}.sheet{position:absolute;left:0;right:0;bottom:0;background:rgba(250,250,251,.96);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);border-radius:34px 34px 0 0;padding:10px 18px calc(22px + env(safe-area-inset-bottom));box-shadow:0 -22px 60px rgba(0,0,0,.12);animation:up .28s cubic-bezier(.18,.85,.25,1)}
+  .grabber{width:38px;height:5px;border-radius:4px;background:#d1d3d7;margin:0 auto 17px}.sheet h2{margin:0 0 16px;font-size:24px;letter-spacing:-.4px}.sheet p.note{margin:-8px 0 15px;font-size:13px;color:#858991;line-height:1.45}.field{background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:21px;padding:14px 15px;margin-bottom:11px;box-shadow:0 1px 0 rgba(255,255,255,.8)}.field label{display:block;font-size:12px;color:#8b8f96;font-weight:650;margin-bottom:7px}.field input,.field textarea{border:0;outline:0;background:transparent;width:100%;font-size:16px;color:#111;resize:none}.field textarea{font-size:22px;line-height:1.35;min-height:86px;font-weight:650;letter-spacing:-.3px}.counter{text-align:right;font-size:11px;color:#a0a3aa;margin-top:6px}.quick{display:flex;gap:7px;overflow:auto;margin:-1px 0 11px}.quick button{padding:8px 11px;border-radius:999px;background:#e8e9ec;color:#555a62;font-size:12px;font-weight:650;white-space:nowrap;cursor:pointer}.quick button.on{background:#191a1d;color:white}.fine{font-size:11px;color:#969aa1;text-align:center;margin:10px 0 0}
+  .toast{position:absolute;left:50%;bottom:100px;transform:translateX(-50%) translateY(10px);padding:10px 14px;border-radius:14px;background:rgba(17,18,21,.88);backdrop-filter:blur(14px);color:#fff;font-size:13px;opacity:0;pointer-events:none;transition:.22s;z-index:60;white-space:nowrap}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .unlock{position:absolute;inset:0;background:rgba(244,245,247,.94);z-index:45;display:none;place-items:center}.unlock.show{display:grid}.lock-big{font-size:56px;animation:pop .58s ease both}.unlock-text{font-size:15px;color:#777;text-align:center;margin-top:12px}
+  .controller{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:calc(100vw - 24px);display:flex;gap:6px;padding:7px;border-radius:20px;background:rgba(255,255,255,.70);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:0 14px 40px rgba(0,0,0,.15);z-index:100;overflow:auto}.controller button{padding:9px 12px;border-radius:14px;background:transparent;color:#555a61;font-size:12px;font-weight:750;white-space:nowrap;cursor:pointer}.controller button.active{background:#17181b;color:#fff}
+  .empty{padding:68px 24px;text-align:center}.empty .icon{font-size:40px}.empty h3{font-size:20px;margin:15px 0 7px}.empty p{font-size:14px;color:#858991;line-height:1.5;margin:0}
+  @keyframes up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  @keyframes pop{0%{transform:scale(.76) rotate(-8deg);opacity:.2}60%{transform:scale(1.08) rotate(3deg);opacity:1}100%{transform:scale(1) rotate(0)}}
+  @media (max-width:560px){.stage{padding:0 0 86px;display:block;background:var(--bg)}.phone{width:100%;height:calc(100vh - 80px);min-height:650px;border-radius:0;box-shadow:none}.controller{bottom:10px}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="stage">
+  <main class="phone" aria-label="微信小程序原型">
+    <div class="screen">
+      <div class="status"><span id="clock">19:07</span><span class="status-icons"><span>5G</span><span class="wifi"></span><span class="battery"><i></i></span></span></div>
+      <div class="wx-top"><button class="back" id="backBtn" aria-label="返回" style="visibility:hidden">‹</button><div class="mini-capsule"><span class="dots">•••</span><span class="divider"></span><span class="circle"></span></div></div>
+      <div class="content" id="content"></div>
+      <div id="bottom"></div>
+      <div class="toast" id="toast"></div>
+      <div class="unlock" id="unlock"><div><div class="lock-big">🔓</div><div class="unlock-text">正在开封那天的话…</div></div></div>
+      <div class="sheet-wrap" id="createSheet"><div class="scrim" data-close="create"></div><section class="sheet"><div class="grabber"></div><h2>记住这句话</h2><div class="field"><label>这句话</label><textarea id="statementInput" maxlength="80" placeholder="比如：iPhone 19 还是不会有屏下摄像头"></textarea><div class="counter"><span id="countText">0</span>/80</div></div><div class="field"><label>开封时间</label><input id="timeInput" value="2026-10-18 20:00" readonly /></div><div class="quick" id="quickTime"><button>今晚</button><button>24 小时后</button><button>7 天后</button><button class="on">自定义</button></div><div class="field"><label>群里怎么叫你</label><input id="creatorAlias" maxlength="12" value="AJ" placeholder="比如 AJ" /></div><button class="primary" id="createSubmit">锁住这句话</button><div class="fine">创建后不可修改。</div></section></div>
+      <div class="sheet-wrap" id="aliasSheet"><div class="scrim" data-close="alias"></div><section class="sheet"><div class="grabber"></div><h2>群里怎么叫你？</h2><p class="note">开封时会用这个名字，不需要微信头像。</p><div class="field"><label>称呼</label><input id="aliasInput" maxlength="12" value="Rose" placeholder="比如 Rose" /></div><button class="primary" id="aliasSubmit">就叫这个</button></section></div>
+    </div>
+  </main>
+</div>
+<div class="controller" id="controller">
+  <button data-view="home" class="active">Home</button>
+  <button data-view="join">Join</button>
+  <button data-view="sealed">Sealed</button>
+  <button data-view="due">Due</button>
+  <button data-view="opened">Opened</button>
+</div>
+<script>
+const content=document.getElementById('content');
+const bottom=document.getElementById('bottom');
+const backBtn=document.getElementById('backBtn');
+const toast=document.getElementById('toast');
+const createSheet=document.getElementById('createSheet');
+const aliasSheet=document.getElementById('aliasSheet');
+const unlock=document.getElementById('unlock');
+let view='home';
+let pendingChoice=null;
+let statement='iPhone 19 还是不会有屏下摄像头';
+let creator='AJ';
+let myAlias='Rose';
+const demoCards=[
+  {state:'进行中',cls:'',role:'我参与的',text:'iPhone 19 还是不会有屏下摄像头',meta:'4 人押话 · 10/18 20:00 开封',view:'sealed'},
+  {state:'待开封',cls:'due',role:'我参与的',text:'小李今晚一定最后一个到',meta:'6 人押话 · 现在可以开封',view:'due'},
+  {state:'已开封',cls:'opened',role:'我发起的',text:'这部电影豆瓣最后不会超过 7.5',meta:'5 人押话 · 8/1 已开封',view:'opened'}
+];
+function iconLock(){return '<span class="lock">⌁</span>'}
+function render(){
+  backBtn.style.visibility=view==='home'?'hidden':'visible';
+  document.querySelectorAll('#controller button').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+  if(view==='home') renderHome();
+  if(view==='join') renderJoin(false);
+  if(view==='sealed') renderJoin(true);
+  if(view==='due') renderDue();
+  if(view==='opened') renderOpened();
+}
+function renderHome(){
+  content.innerHTML=`
+    <h1 class="hero-title">记住你说的</h1>
+    <p class="hero-sub">把今天的话，留给以后。</p>
+    <div class="chips"><button class="chip active">全部</button><button class="chip">进行中</button><button class="chip">待开封</button><button class="chip">已开封</button></div>
+    <div class="list">${demoCards.map((c,i)=>`<article class="card" data-card="${i}"><div class="row"><span class="state-pill ${c.cls}">${c.state}</span><span class="role">${c.role}</span></div><div class="statement-sm">${c.text}</div><div class="meta">${c.meta}</div></article>`).join('')}</div>`;
+  bottom.innerHTML=`<div class="bottom-glass"><button class="primary" id="createBtn">＋&nbsp; 记一句</button></div>`;
+  document.getElementById('createBtn').onclick=()=>openSheet(createSheet);
+  content.querySelectorAll('[data-card]').forEach(el=>el.onclick=()=>{view=demoCards[+el.dataset.card].view;render()});
+  content.querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>{content.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));ch.classList.add('active')});
+}
+function detailCore(label='还在封存'){
+  return `<div class="detail-head"><div class="eyebrow">${iconLock()} ${label}</div><div class="creator">${creator} 把话放这了</div><h1 class="statement">${statement}</h1><div class="open-time"><span>◷</span><span>10 月 18 日 20:00 开封</span></div></div><div class="divider-line"></div>`
+}
+function renderJoin(sealed){
+  content.innerHTML=detailCore()+`<div class="count">已有 4 人押话</div><div class="hint">截止前不显示任何人的选择。</div>${sealed?`<div style="height:22px"></div><div class="sealed-card"><div class="seal-icon">✓</div><div><div class="sealed-title">你的选择已封存</div><div class="sealed-sub">你押了：同意<br>到开封前，其他人的选择不会公开。</div></div></div>`:''}`;
+  bottom.innerHTML=sealed?`<div class="bottom-glass"><button class="secondary" id="shareBtn">发给朋友押一句</button></div>`:`<div class="bottom-glass"><div class="choice-bar"><button class="choice" data-choice="agree">我同意</button><button class="choice" data-choice="disagree">我反对</button></div></div>`;
+  if(sealed) document.getElementById('shareBtn').onclick=()=>showToast('已唤起微信分享卡片（原型）');
+  else document.querySelectorAll('[data-choice]').forEach(b=>b.onclick=()=>{pendingChoice=b.dataset.choice;openSheet(aliasSheet)});
+}
+function renderDue(){
+  content.innerHTML=`<div class="detail-head"><span class="due-mark">⌛ 该开封了</span><div class="creator">王哥 把话放这了</div><h1 class="statement">小李今晚一定最后一个到</h1><div class="open-time"><span>◷</span><span>今天 22:00 截止</span></div></div><div class="divider-line"></div><div class="due-title">当时共 6 人押话</div><div class="due-copy">你参与过这次押话，现在任何参与者都可以开封。</div>`;
+  bottom.innerHTML=`<div class="bottom-glass"><button class="primary" id="openBtn">开封</button></div>`;
+  document.getElementById('openBtn').onclick=()=>{unlock.classList.add('show');setTimeout(()=>{unlock.classList.remove('show');view='opened';render()},620)};
+}
+function renderOpened(){
+  const rows=[['AJ','同意','agree','发起人'],['Rose','反对','disagree',''],['王哥','反对','disagree',''],['小李','同意','agree','']];
+  content.innerHTML=`<div class="detail-head"><div class="eyebrow"><span class="lock" style="background:#eaf5ef;color:#26724e">✓</span> 已开封</div><div class="creator">${creator} 当时说</div><h1 class="statement">${statement}</h1></div><div class="divider-line"></div><div class="count">那天大家是这么说的</div><div class="results">${rows.map(r=>`<div class="result"><div class="avatar">${r[0].slice(0,1)}</div><div class="person">${r[0]}${r[3]?`<span class="badge">${r[3]}</span>`:''}</div><span class="stance ${r[2]}">${r[1]}</span></div>`).join('')}</div>`;
+  bottom.innerHTML=`<div class="bottom-glass"><button class="primary" id="reshare">发回群里</button><button class="ghost" id="again">再记一句</button></div>`;
+  document.getElementById('reshare').onclick=()=>showToast('已唤起开封结果分享（原型）');
+  document.getElementById('again').onclick=()=>{view='home';render();setTimeout(()=>openSheet(createSheet),60)};
+}
+function openSheet(el){el.classList.add('show')}
+function closeSheet(el){el.classList.remove('show')}
+function showToast(msg){toast.textContent=msg;toast.classList.add('show');clearTimeout(showToast.t);showToast.t=setTimeout(()=>toast.classList.remove('show'),1600)}
+backBtn.onclick=()=>{view='home';render()};
+document.querySelectorAll('.scrim').forEach(s=>s.onclick=()=>closeSheet(s.dataset.close==='create'?createSheet:aliasSheet));
+document.getElementById('statementInput').addEventListener('input',e=>document.getElementById('countText').textContent=e.target.value.length);
+document.getElementById('quickTime').querySelectorAll('button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#quickTime button').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById('timeInput').value=b.textContent==='今晚'?'2026-09-26 23:59':b.textContent==='24 小时后'?'2026-09-27 19:07':b.textContent==='7 天后'?'2026-10-03 19:07':'2026-10-18 20:00'});
+document.getElementById('createSubmit').onclick=()=>{
+  const v=document.getElementById('statementInput').value.trim(); const a=document.getElementById('creatorAlias').value.trim();
+  if(v.length<2){showToast('至少写两个字');return} if(!a){showToast('填一下群里的称呼');return}
+  statement=v;creator=a;closeSheet(createSheet);view='sealed';render();showToast('这句话已经锁住');
+};
+document.getElementById('aliasSubmit').onclick=()=>{
+  const a=document.getElementById('aliasInput').value.trim(); if(!a){showToast('填一下群里的称呼');return}
+  myAlias=a;closeSheet(aliasSheet);view='sealed';render();showToast(pendingChoice==='agree'?'已押：同意':'已押：反对');pendingChoice=null;
+};
+document.getElementById('controller').querySelectorAll('button').forEach(b=>b.onclick=()=>{view=b.dataset.view;render()});
+render();
+</script>
+</body>
+</html>

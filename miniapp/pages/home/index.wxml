@@ -1,0 +1,10 @@
+<view class="page">
+  <view class="hero"><view class="hero-title">记住你说的</view><view class="hero-sub">把今天的话，留给以后。</view></view>
+  <scroll-view class="filters" scroll-x><view class="filter-row"><view data-filter="ALL" bindtap="filterTap" class="chip {{filter==='ALL'?'active':''}}">全部</view><view data-filter="ACTIVE" bindtap="filterTap" class="chip {{filter==='ACTIVE'?'active':''}}">进行中</view><view data-filter="DUE" bindtap="filterTap" class="chip {{filter==='DUE'?'active':''}}">待开封</view><view data-filter="OPENED" bindtap="filterTap" class="chip {{filter==='OPENED'?'active':''}}">已开封</view></view></scroll-view>
+  <view wx:if="{{loading}}" class="skeleton"><view></view><view></view><view></view></view>
+  <view wx:elif="{{error}}" class="message"><view>{{error}}</view><button class="secondary" bindtap="load">重试</button></view>
+  <view wx:elif="{{!visible.length}}" class="message"><view class="empty-icon">🔒</view><view class="empty-title">{{filter==='ALL'?'还没有要记住的话':'这里还没有记录'}}</view><view class="muted">下次群里有人放狠话，顺手锁一下。</view><button class="secondary empty-button" bindtap="openCreate">记一句</button></view>
+  <view wx:else class="cards"><view wx:for="{{visible}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="openCard"><view class="card-head"><text class="state-pill {{item.state==='DUE'?'due':item.state==='OPENED'?'opened':''}}">{{item.label}}</text><text class="role">{{item.roleText}}</text></view><view class="statement">{{item.statement}}</view><view class="meta">{{item.participant_count}} 人押话 · {{item.timeText}} 开封</view></view><button wx:if="{{nextCursor}}" class="more" loading="{{moreBusy}}" bindtap="loadMore">加载更多</button></view>
+</view>
+<view class="bottom"><button class="primary" bindtap="openCreate">＋ 记一句</button></view>
+<create-sheet id="createSheet" show="{{creating}}" default-alias="{{alias}}" busy="{{createBusy}}" error="{{createError}}" bindclose="closeCreate" bindsubmit="submitCreate" />

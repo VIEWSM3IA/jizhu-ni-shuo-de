@@ -1,0 +1,24 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="skeleton"><view></view><view></view><view></view></view>
+  <view wx:elif="{{error && !capsule}}" class="message"><view>{{error}}</view><button class="secondary" bindtap="load">重试</button></view>
+  <view wx:elif="{{capsule.state==='INVALID'}}" class="message"><view class="empty-icon">🔓</view><view class="empty-title">这句话已经不在了</view><view class="muted">可能被发起人撤销，或者链接已经失效。</view><button class="secondary" bindtap="goHome">回到首页</button></view>
+  <block wx:else>
+    <view class="top-row"><text class="state-pill {{capsule.state==='DUE'?'due':capsule.state==='OPENED'?'opened':''}}">{{capsule.state==='DUE'?'⌛ 该开封了':capsule.state==='OPENED'?'✓ 已开封':'🔒 还在封存'}}</text><button class="menu" bindtap="menu" aria-label="更多操作">•••</button></view>
+    <view class="creator">{{capsule.creator_alias}} 把话放这了</view><view class="statement">{{capsule.statement}}</view><view class="open-time">◷ {{capsule.timeText}} 开封</view>
+    <view class="divider"></view>
+    <block wx:if="{{capsule.state==='JOINABLE' || capsule.state==='SEALED'}}"><view class="count">已有 {{capsule.participant_count}} 人押话</view><view class="hint">截止前不显示任何人的选择。</view></block>
+    <view wx:if="{{capsule.state==='SEALED'}}" class="sealed"><view class="seal-icon">✓</view><view><view class="sealed-title">你的选择已封存</view><view class="hint">你押了：{{capsule.viewer.my_stance==='agree'?'同意':'反对'}}</view><view class="hint">到开封前，其他人的选择不会公开。</view></view></view>
+    <block wx:if="{{capsule.state==='DUE'}}"><view class="due-title">当时共 {{capsule.participant_count}} 人押话</view><view class="hint">{{capsule.viewer.is_participant?'你参与过这次押话，现在任何参与者都可以开封。':'这次你没押话，结果只对参与者开放。'}}</view></block>
+    <block wx:if="{{capsule.state==='OPENED'}}"><view wx:if="{{capsule.viewer.is_participant}}"><view class="count">那天大家是这么说的</view><view class="results"><view wx:for="{{capsule.results}}" wx:key="submitted_at" class="result"><view class="avatar">{{item.avatar}}</view><view class="person">{{item.alias}} <text wx:if="{{item.is_creator}}" class="badge">发起人</text></view><view class="stance {{item.stance}}">{{item.label}}</view></view></view></view><view wx:else class="hint">已开封 · 结果仅参与者可见</view></block>
+    <view wx:if="{{error}}" class="error">{{error}}</view>
+  </block>
+</view>
+<view wx:if="{{capsule && capsule.state!=='INVALID'}}" class="bottom">
+  <view wx:if="{{capsule.state==='JOINABLE'}}" class="choices"><button disabled="{{busy}}" data-stance="agree" bindtap="choose">我同意</button><button disabled="{{busy}}" data-stance="disagree" bindtap="choose">我反对</button></view>
+  <button wx:elif="{{capsule.state==='SEALED'}}" class="secondary" open-type="share">发给朋友押一句</button>
+  <button wx:elif="{{capsule.state==='DUE' && capsule.viewer.is_participant}}" class="primary" disabled="{{busy}}" bindtap="openCapsule">{{busy?'正在开封…':'开封'}}</button>
+  <button wx:elif="{{capsule.state==='OPENED'}}" class="primary" open-type="share">发回群里</button>
+  <button wx:if="{{capsule.state==='OPENED'}}" class="home-link" bindtap="createAgain">再记一句</button>
+  <button wx:if="{{!canGoBack}}" class="home-link" bindtap="goHome">回到首页</button>
+</view>
+<alias-sheet show="{{aliasOpen}}" busy="{{busy}}" error="{{aliasError}}" bindclose="closeAlias" bindsubmit="aliasSubmit" />

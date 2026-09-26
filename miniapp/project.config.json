@@ -1,0 +1,6 @@
+{
+  "appid": "touristappid",
+  "projectname": "记住你说的",
+  "compileType": "miniprogram",
+  "setting": { "es6": true, "minified": true, "urlCheck": true }
+}

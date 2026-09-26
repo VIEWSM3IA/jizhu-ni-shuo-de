@@ -1,0 +1,29 @@
+{
+  "viewer": {"id": "u_rose", "last_alias": "Rose"},
+  "capsules": [
+    {
+      "id": "c_iphone19",
+      "creator_alias": "AJ",
+      "statement": "iPhone 19 还是不会有屏下摄像头",
+      "opens_at": "2026-10-18T12:00:00.000Z",
+      "participant_count": 4,
+      "state": "JOINABLE"
+    },
+    {
+      "id": "c_late",
+      "creator_alias": "王哥",
+      "statement": "小李今晚一定最后一个到",
+      "opens_at": "2026-09-26T14:00:00.000Z",
+      "participant_count": 6,
+      "state": "DUE"
+    },
+    {
+      "id": "c_movie",
+      "creator_alias": "Rose",
+      "statement": "这部电影豆瓣最后不会超过 7.5",
+      "opens_at": "2026-08-01T12:00:00.000Z",
+      "participant_count": 5,
+      "state": "OPENED"
+    }
+  ]
+}

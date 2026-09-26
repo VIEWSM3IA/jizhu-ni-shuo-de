@@ -1,0 +1,13 @@
+page { background: #f4f5f7; color: #17181b; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+button::after { border: 0; }
+.page { min-height: 100vh; box-sizing: border-box; padding: 28rpx 36rpx 210rpx; }
+.muted { color: #81858d; }
+.primary { background: #17181b; color: #fff; border-radius: 36rpx; font-size: 32rpx; font-weight: 700; height: 108rpx; line-height: 108rpx; box-shadow: 0 12rpx 32rpx rgba(0,0,0,.13); }
+.primary[disabled] { opacity: .48; }
+.primary { transition: transform 120ms cubic-bezier(.23,1,.32,1); }.primary:active { transform: scale(.985); }
+.secondary { background: #e8e9ec; color: #17181b; border-radius: 34rpx; font-size: 30rpx; font-weight: 700; height: 100rpx; line-height: 100rpx; }
+.bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; padding: 24rpx 36rpx calc(28rpx + env(safe-area-inset-bottom)); background: rgba(244,245,247,.96); }
+.error { color: #b44b43; font-size: 26rpx; line-height: 1.5; margin: 20rpx 0; }
+.state-pill { display: inline-block; padding: 10rpx 18rpx; border-radius: 100rpx; background: #eceef1; color: #60656d; font-size: 23rpx; font-weight: 700; }
+.state-pill.due { background: #fff0dc; color: #975d00; }
+.state-pill.opened { background: #eaf5ef; color: #24714e; }
