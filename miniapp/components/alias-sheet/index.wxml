@@ -1,4 +1,4 @@
-<view wx:if="{{visible}}" class="overlay {{show?'':'closing'}}" bindtap="close"><view class="sheet" catchtap="noop">
+<view wx:if="{{visible}}" class="overlay {{show?'':'closing'}}" bindtap="close" catchtouchmove="noop"><view class="sheet" catchtap="noop">
   <view class="grabber"></view><view class="title">群里怎么叫你？</view>
   <view class="note">开封时会用这个名字，不需要微信头像。</view>
   <view class="field"><view class="label">称呼</view><input focus="{{show}}" maxlength="12" placeholder="比如 Rose" value="{{alias}}" bindinput="input" /></view>

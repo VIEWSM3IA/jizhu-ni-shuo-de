@@ -28,13 +28,15 @@ WECHAT_APP_ID=你的AppID WECHAT_APP_SECRET=你的AppSecret DATABASE_URL='postgr
 
 ## 验证
 
-`npm run check` 检查 JavaScript 语法。`npm test` 会**清空指定测试数据库的业务表**，务必只传可丢弃的测试库：
+验证分三层。第一层 `npm run check` 检查 JavaScript 语法、小程序页面/组件注册与引用，以及明显的客户端密钥误入；`npm run test:frontend` 覆盖创建时间状态与详情页到期刷新逻辑。第二层 `npm test` 运行前端测试和 PostgreSQL API 集成测试，且会**清空指定测试数据库的业务表**，务必只传可丢弃的测试库：
 
 ```sh
 TEST_DATABASE_URL='postgresql://user:password@localhost:5432/capsule_test' npm test
 ```
 
-测试直接启动 HTTP API，并覆盖字段校验、内容安全拒绝、创建事务与幂等、并发押话/开封、截止、撤销、列表排序、鉴权和结果隐私。GitHub Actions 在独立 PostgreSQL 服务中执行相同检查。
+测试直接启动 HTTP API，并覆盖字段校验、内容安全拒绝、创建事务与幂等、并发押话/开封、截止及撤销边界、列表排序、鉴权和结果隐私。GitHub Actions 在独立 PostgreSQL 服务中执行相同检查。
+
+第三层必须在微信开发者工具中真实导入、编译和走查 Home → Create → Detail → 分享冷启动 → 另一账号押话 → 到期 → 开封 → 回 Home；再分别用 iOS、Android 真机检查系统胶囊、键盘、安全区、下拉刷新、前后台切换、弱网和长文本/emoji。当前仓库及 CI 没有可运行的微信开发者工具环境，因此这些项目在完成实测前标记为 **NOT RUN**。CI 绿灯只代表前两层通过，不能替代第三层。
 
 ## 体验版与上线前事项
 

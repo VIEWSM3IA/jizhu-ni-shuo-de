@@ -8,7 +8,8 @@
 .count { text-align: right; color: #a0a3aa; font-size: 22rpx; }
 .quick { white-space: nowrap; margin-bottom: 18rpx; }.quick-row { display: flex; gap: 12rpx; }.quick button { display: inline-block; flex-shrink: 0; margin: 0; padding: 0 20rpx; height: 64rpx; line-height: 64rpx; border-radius: 100rpx; background: #e8e9ec; color: #555a62; font-size: 24rpx; }.quick .active { background: #191a1d; color: #fff; }
 .picker-row { display: flex; gap: 16rpx; margin-bottom: 16rpx; }.picker { padding: 16rpx 24rpx; border-radius: 20rpx; background: #e8e9ec; font-size: 26rpx; }
-.fine { text-align: center; color: #969aa1; font-size: 22rpx; margin-top: 16rpx; }
+.fine { text-align: center; color: #747981; font-size: 23rpx; margin-top: 16rpx; }
+.quick button[disabled] { background: #eef0f4; color: #9a9ea5; opacity: 1; }
 .overlay { animation: scrimIn 260ms cubic-bezier(.23,1,.32,1) both; }.sheet { animation: sheetUp 260ms cubic-bezier(.32,.72,0,1) both; }
 .overlay.closing { animation: scrimOut 200ms cubic-bezier(.23,1,.32,1) both; }.overlay.closing .sheet { animation: sheetDown 200ms cubic-bezier(.32,.72,0,1) both; }
 @keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } } @keyframes scrimOut { from { opacity: 1; } to { opacity: 0; } }

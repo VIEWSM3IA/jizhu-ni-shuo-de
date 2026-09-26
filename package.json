@@ -5,7 +5,9 @@
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test tests/*.test.js",
-    "check": "find server miniapp -name '*.js' -print0 | xargs -0 -n1 node --check"
+    "test:frontend": "node --test tests/frontend.test.js",
+    "check:miniapp": "node scripts/check-miniapp.cjs",
+    "check": "find server miniapp scripts tests -type f \\( -name '*.js' -o -name '*.cjs' \\) -print0 | xargs -0 -n1 node --check && npm run check:miniapp"
   },
   "dependencies": {
     "pg": "^8.16.3"

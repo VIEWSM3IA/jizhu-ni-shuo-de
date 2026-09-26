@@ -9,7 +9,7 @@
     <block wx:if="{{capsule.state==='JOINABLE' || capsule.state==='SEALED'}}"><view class="count">已有 {{capsule.participant_count}} 人押话</view><view class="hint">截止前不显示任何人的选择。</view></block>
     <view wx:if="{{capsule.state==='SEALED'}}" class="sealed"><view class="seal-icon">✓</view><view><view class="sealed-title">你的选择已封存</view><view class="hint">你押了：{{capsule.viewer.my_stance==='agree'?'同意':'反对'}}</view><view class="hint">到开封前，其他人的选择不会公开。</view></view></view>
     <block wx:if="{{capsule.state==='DUE'}}"><view class="due-title">当时共 {{capsule.participant_count}} 人押话</view><view class="hint">{{capsule.viewer.is_participant?'你参与过这次押话，现在任何参与者都可以开封。':'这次你没押话，结果只对参与者开放。'}}</view></block>
-    <block wx:if="{{capsule.state==='OPENED'}}"><view wx:if="{{capsule.viewer.is_participant}}"><view class="count">那天大家是这么说的</view><view class="results"><view wx:for="{{capsule.results}}" wx:key="submitted_at" class="result"><view class="avatar">{{item.avatar}}</view><view class="person">{{item.alias}} <text wx:if="{{item.is_creator}}" class="badge">发起人</text></view><view class="stance {{item.stance}}">{{item.label}}</view></view></view></view><view wx:else class="hint">已开封 · 结果仅参与者可见</view></block>
+    <block wx:if="{{capsule.state==='OPENED'}}"><view wx:if="{{capsule.viewer.is_participant}}"><view class="count">那天大家是这么说的</view><view class="results"><view wx:for="{{capsule.results}}" wx:key="id" class="result"><view class="avatar">{{item.avatar}}</view><view class="person">{{item.alias}} <text wx:if="{{item.is_creator}}" class="badge">发起人</text></view><view class="stance {{item.stance}}">{{item.label}}</view></view></view></view><view wx:else class="hint">已开封 · 结果仅参与者可见</view></block>
     <view wx:if="{{error}}" class="error">{{error}}</view>
   </block>
 </view>

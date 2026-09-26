@@ -1,14 +1,14 @@
-<view wx:if="{{visible}}" class="overlay {{show?'':'closing'}}" bindtap="close">
-  <view class="sheet" catchtap="noop">
+<view wx:if="{{visible}}" class="overlay {{show?'':'closing'}}" bindtap="close" catchtouchmove="noop">
+  <scroll-view scroll-y class="sheet" catchtap="noop">
     <view class="grabber"></view>
     <view class="title">记住这句话</view>
-    <view class="field"><view class="label">这句话</view><textarea class="statement-input" placeholder="比如：iPhone 19 还是不会有屏下摄像头" maxlength="80" value="{{statement}}" bindinput="onStatement" /><view class="count">{{statement.length}}/80</view></view>
+    <view class="field statement-field"><view class="label">这句话</view><textarea class="statement-input" placeholder="比如：iPhone 19 还是不会有屏下摄像头" maxlength="-1" disabled="{{busy}}" value="{{statement}}" bindinput="onStatement" /><view class="count">{{statementCount}}/80</view></view>
     <view class="field"><view class="label">开封时间</view><view>{{displayTime || '请选择开封时间'}}</view></view>
-    <scroll-view scroll-x class="quick"><view class="quick-row"><button data-kind="tonight" bindtap="choose" class="{{selected==='tonight'?'active':''}}">今晚</button><button data-kind="day" bindtap="choose" class="{{selected==='day'?'active':''}}">24 小时后</button><button data-kind="week" bindtap="choose" class="{{selected==='week'?'active':''}}">7 天后</button><button data-kind="custom" bindtap="choose" class="{{selected==='custom'?'active':''}}">自定义</button></view></scroll-view>
-    <view wx:if="{{selected==='custom'}}" class="picker-row"><picker mode="date" value="{{date}}" bindchange="onDate"><view class="picker">{{date || '选择日期'}}</view></picker><picker mode="time" value="{{time}}" bindchange="onTime"><view class="picker">{{time || '选择时间'}}</view></picker></view>
-    <view class="field"><view class="label">群里怎么叫你</view><input placeholder="比如 AJ" maxlength="12" value="{{alias}}" bindinput="onAlias" /></view>
+    <scroll-view scroll-x class="quick"><view class="quick-row"><button data-kind="tonight" bindtap="choose" disabled="{{busy || !tonightAvailable}}" class="{{selected==='tonight'?'active':''}}">今晚</button><button data-kind="day" bindtap="choose" disabled="{{busy}}" class="{{selected==='day'?'active':''}}">24 小时后</button><button data-kind="week" bindtap="choose" disabled="{{busy}}" class="{{selected==='week'?'active':''}}">7 天后</button><button data-kind="custom" bindtap="choose" disabled="{{busy}}" class="{{selected==='custom'?'active':''}}">自定义</button></view></scroll-view>
+    <view wx:if="{{selected==='custom'}}" class="picker-row"><picker mode="date" value="{{date}}" disabled="{{busy}}" bindchange="onDate"><view class="picker">{{date || '选择日期'}}</view></picker><picker mode="time" value="{{time}}" disabled="{{busy}}" bindchange="onTime"><view class="picker">{{time || '选择时间'}}</view></picker></view>
+    <view class="field"><view class="label">群里怎么叫你</view><input placeholder="比如 AJ" maxlength="-1" disabled="{{busy}}" value="{{alias}}" bindinput="onAlias" /></view>
     <view wx:if="{{error}}" class="error">{{error}}</view>
     <button class="primary" disabled="{{busy}}" bindtap="submit">{{busy?'正在锁住…':'锁住这句话'}}</button>
-    <view class="fine">创建后不可修改。</view>
-  </view>
+    <view class="fine">创建后，这句话和开封时间都不能改。</view>
+  </scroll-view>
 </view>

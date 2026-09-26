@@ -61,23 +61,27 @@ function createService(pool, { checkContent, now = () => new Date() }) {
       viewer: { is_creator: c.creator_user_id === user.id, is_participant: participant,
         my_stance: participant ? (c.my_stance ? 'agree' : 'disagree') : null } };
     if (state === 'OPENED' && participant) {
-      dto.results = (await db.query(`SELECT s.alias_snapshot alias,s.stance,s.submitted_at,(s.user_id=c.creator_user_id) is_creator
+      dto.results = (await db.query(`SELECT s.id,s.alias_snapshot alias,s.stance,s.submitted_at,(s.user_id=c.creator_user_id) is_creator
         FROM stances s JOIN capsules c ON c.id=s.capsule_id WHERE s.capsule_id=$1
         ORDER BY is_creator DESC,s.submitted_at ASC,s.id ASC`, [id])).rows.map(r => ({
-          alias: r.alias, stance: r.stance ? 'agree' : 'disagree', is_creator: r.is_creator, submitted_at: iso(r.submitted_at)
+          id: r.id, alias: r.alias, stance: r.stance ? 'agree' : 'disagree', is_creator: r.is_creator, submitted_at: iso(r.submitted_at)
         }));
     }
     return dto;
   }
   async function create(user, body) {
     if (typeof body.client_request_id !== 'string' || !/^[A-Za-z0-9-]{16,100}$/.test(body.client_request_id)) fail(400, 'INVALID_REQUEST_ID', '请重试创建。');
-    const previous = (await pool.query('SELECT id FROM capsules WHERE creator_user_id=$1 AND client_request_id=$2', [user.id, body.client_request_id])).rows[0];
+    const samePayload = c => c.statement === clean(body.statement) && c.creator_alias_snapshot === clean(body.alias) &&
+      typeof body.opens_at === 'string' && Date.parse(body.opens_at) === new Date(c.opens_at).getTime();
+    const previous = (await pool.query('SELECT id,statement,creator_alias_snapshot,opens_at FROM capsules WHERE creator_user_id=$1 AND client_request_id=$2', [user.id, body.client_request_id])).rows[0];
+    if (previous && !samePayload(previous)) fail(409, 'IDEMPOTENCY_CONFLICT', '内容已改变，请重新创建。');
     if (previous) return detail(previous.id, user);
     const statement = statementValue(body.statement), alias = aliasValue(body.alias), opensAt = opensValue(body.opens_at, now());
     await checkContent([statement, alias], user.wechat_openid);
     return transaction(async db => {
       await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`${user.id}:${body.client_request_id}`]);
-      const existing = (await db.query('SELECT id FROM capsules WHERE creator_user_id=$1 AND client_request_id=$2', [user.id, body.client_request_id])).rows[0];
+      const existing = (await db.query('SELECT id,statement,creator_alias_snapshot,opens_at FROM capsules WHERE creator_user_id=$1 AND client_request_id=$2', [user.id, body.client_request_id])).rows[0];
+      if (existing && !samePayload(existing)) fail(409, 'IDEMPOTENCY_CONFLICT', '内容已改变，请重新创建。');
       if (existing) return detail(existing.id, user, db);
       const id = randomUUID();
       await db.query(`INSERT INTO capsules(id,creator_user_id,creator_alias_snapshot,statement,opens_at,client_request_id)
@@ -126,7 +130,7 @@ function createService(pool, { checkContent, now = () => new Date() }) {
       if (!c || c.status === 'cancelled') fail(404, 'NOT_FOUND', '这句话已经不在了。');
       if (c.creator_user_id !== user.id) fail(403, 'CREATOR_ONLY', '只有发起人可以撤销。');
       const count = (await db.query('SELECT count(*)::int count FROM stances WHERE capsule_id=$1', [id])).rows[0].count;
-      if (c.status !== 'sealed' || count !== 1) fail(409, 'CANNOT_CANCEL', '已有朋友参与，不能撤销。');
+      if (c.status !== 'sealed' || now() >= c.opens_at || count !== 1) fail(409, 'CANNOT_CANCEL', '这句话已到期或已有朋友参与，不能撤销。');
       await db.query("UPDATE capsules SET status='cancelled',cancelled_at=now() WHERE id=$1", [id]);
       return { state: 'INVALID' };
     });

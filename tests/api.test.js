@@ -71,6 +71,9 @@ test('create validates fields, checks content, and is atomic and retry safe', as
   assert.equal((await pool.query('SELECT count(*)::int n FROM stances WHERE capsule_id=$1', [a.data.id])).rows[0].n, 1);
   const retry = await request('/v1/capsules', 'POST', body, tokens.creator);
   assert.equal(retry.data.id, a.data.id);
+  const changedRetry = await request('/v1/capsules', 'POST', { ...body, statement: '已经改了内容' }, tokens.creator);
+  assert.equal(changedRetry.status, 409);
+  assert.equal(changedRetry.data.error.code, 'IDEMPOTENCY_CONFLICT');
   clock = new Date(clock.getTime() + 2*3600000);
   assert.equal((await request('/v1/capsules', 'POST', body, tokens.creator)).data.id, a.data.id);
   clock = new Date(clock.getTime() - 2*3600000);
@@ -118,6 +121,8 @@ test('concurrent open returns the same participant-only result and home updates'
   assert.deepEqual(a.data.results, b.data.results);
   assert.equal(a.data.results.length, 2);
   assert.equal(a.data.results[0].is_creator, true);
+  assert.ok(a.data.results.every(result => /^[0-9a-f-]{36}$/.test(result.id)));
+  assert.equal(new Set(a.data.results.map(result => result.id)).size, a.data.results.length);
   assert.equal((await pool.query('SELECT count(*)::int n FROM capsules WHERE id=$1 AND opened_by_user_id IS NOT NULL', [id])).rows[0].n, 1);
   const visitor = await request(`/v1/capsules/${id}`, 'GET', undefined, tokens.visitor);
   assert.equal(visitor.data.state, 'OPENED'); assert.equal(visitor.data.results, undefined);
@@ -135,6 +140,27 @@ test('cancellation, invalid links, report and auth boundaries', async () => {
   assert.equal((await request(`/v1/capsules/${id}`, 'GET', undefined, tokens.visitor)).data.state, 'INVALID');
   assert.equal((await request('/v1/me/capsules')).status, 401);
   assert.equal((await request('/v1/capsules/not-a-uuid', 'GET', undefined, tokens.visitor)).data.state, 'INVALID');
+});
+
+test('creator can cancel before the deadline but not at or after it', async () => {
+  const start = new Date(clock);
+  const deadline = new Date(start.getTime() + 3600000);
+  const ids = [];
+  for (const suffix of ['before', 'exact', 'after']) {
+    const created = await request('/v1/capsules', 'POST', { ...createBody(`cancel-boundary-${suffix}-12345`), opens_at: deadline.toISOString() }, tokens.creator);
+    assert.equal(created.status, 201);
+    ids.push(created.data.id);
+  }
+  clock = new Date(deadline.getTime() - 1);
+  assert.equal((await request(`/v1/capsules/${ids[0]}`, 'DELETE', {}, tokens.creator)).status, 200);
+  clock = deadline;
+  const exact = await request(`/v1/capsules/${ids[1]}`, 'DELETE', {}, tokens.creator);
+  assert.equal(exact.status, 409); assert.equal(exact.data.error.code, 'CANNOT_CANCEL');
+  clock = new Date(deadline.getTime() + 1);
+  const after = await request(`/v1/capsules/${ids[2]}`, 'DELETE', {}, tokens.creator);
+  assert.equal(after.status, 409); assert.equal(after.data.error.code, 'CANNOT_CANCEL');
+  assert.equal((await request(`/v1/capsules/${ids[2]}`, 'GET', undefined, tokens.creator)).data.state, 'DUE');
+  clock = start;
 });
 
 test('cancel and join racing cannot leave a cancelled capsule with a second participant', async () => {
