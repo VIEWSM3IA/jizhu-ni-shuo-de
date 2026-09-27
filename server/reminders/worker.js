@@ -1,6 +1,9 @@
 'use strict';
 
 const { randomUUID } = require('crypto');
+const CLAIM_LIMIT = 20;
+const SEND_CONCURRENCY = 5;
+const LEASE_MS = 4 * 60 * 1000;
 
 function createReminderWorker(pool, { send, now = () => new Date(), logger = console }) {
   if (!pool || typeof send !== 'function') throw new TypeError('pool and send required');
@@ -46,7 +49,7 @@ function createReminderWorker(pool, { send, now = () => new Date(), logger = con
 
     const claimAt = now();
     const client = await pool.connect();
-    let job;
+    const jobs = [];
     try {
       await client.query('BEGIN');
       const { rows } = await client.query(
@@ -62,7 +65,7 @@ function createReminderWorker(pool, { send, now = () => new Date(), logger = con
            AND r.expires_at > $1
          ORDER BY COALESCE(r.next_attempt_at,r.send_after),r.id
          FOR UPDATE OF r SKIP LOCKED
-         LIMIT 1`,
+         LIMIT ${CLAIM_LIMIT}`,
         [claimAt]
       );
       if (!rows[0]) {
@@ -70,18 +73,19 @@ function createReminderWorker(pool, { send, now = () => new Date(), logger = con
         return null;
       }
 
-      const row = rows[0];
-      const token = randomUUID();
-      const leaseUntil = new Date(claimAt.getTime() + 2 * 60 * 1000);
-      const claimed = await client.query(
-        `UPDATE capsule_reminders
-         SET status='sending',lease_token=$2,lease_until=$3,
-             attempt_count=attempt_count+1,updated_at=$4
-         WHERE id=$1 AND status='pending'
-         RETURNING attempt_count`,
-        [row.id, token, leaseUntil, claimAt]
-      );
-      job = { ...row, leaseToken: token, attemptCount: claimed.rows[0].attempt_count };
+      for (const row of rows) {
+        const token = randomUUID();
+        const leaseUntil = new Date(claimAt.getTime() + LEASE_MS);
+        const claimed = await client.query(
+          `UPDATE capsule_reminders
+           SET status='sending',lease_token=$2,lease_until=$3,
+               attempt_count=attempt_count+1,updated_at=$4
+           WHERE id=$1 AND status='pending'
+           RETURNING attempt_count`,
+          [row.id, token, leaseUntil, claimAt]
+        );
+        jobs.push({ ...row, leaseToken: token, attemptCount: claimed.rows[0].attempt_count });
+      }
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -90,6 +94,29 @@ function createReminderWorker(pool, { send, now = () => new Date(), logger = con
       client.release();
     }
 
+    const results = [];
+    for (let i = 0; i < jobs.length; i += SEND_CONCURRENCY) {
+      const batch = jobs.slice(i, i + SEND_CONCURRENCY);
+      const settled = await Promise.allSettled(batch.map(processJob));
+      for (let j = 0; j < settled.length; j++) {
+        const result = settled[j];
+        if (result.status === 'fulfilled') results.push(result.value);
+        else {
+          logger.error?.('reminder worker job failed', {
+            id: batch[j].id, error: String(result.reason?.code || result.reason?.name || 'error')
+          });
+          results.push('stale');
+        }
+      }
+    }
+    if (results.length === 1) return results[0];
+    for (const status of ['sent', 'pending', 'failed', 'expired']) {
+      if (results.includes(status)) return status;
+    }
+    return 'stale';
+  }
+
+  async function processJob(job) {
     // A cancellation committed after claim must be observed before the provider call.
     const stillActive = await pool.query(`SELECT 1 FROM capsule_reminders r JOIN capsules c ON c.id=r.capsule_id
       WHERE r.id=$1 AND r.status='sending' AND r.lease_token=$2 AND r.lease_until>$3
@@ -154,7 +181,6 @@ function createReminderWorker(pool, { send, now = () => new Date(), logger = con
       });
       return done.rowCount ? status : 'stale';
     }
-
   }
 
   function start(pollMs) {

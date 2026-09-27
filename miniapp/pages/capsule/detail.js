@@ -121,9 +121,19 @@ Page({
       track('reminder_arm_success', { capsule_id: this.data.id });
       await this.load(true, true);
       wx.showToast({ title: '到期时会提醒你', icon: 'none' });
-    } catch {
-      this.setData({ reminderUI: { eligible: true, state: 'pending', configured: true } });
-      wx.showToast({ title: '提醒保存失败，可点击重试', icon: 'none' });
+    } catch (error) {
+      const code = error?.code;
+      if (code === 'REMINDER_NOT_ELIGIBLE' || code === 'REMINDER_ALREADY_SENT') {
+        try { wx.removeStorageSync('reminder_grant:' + this.data.id); } catch {}
+        await this.load(true, true);
+      } else if (code === 'REMINDER_TEMPLATE_MISMATCH' || code === 'INVALID_TIMEZONE') {
+        try { wx.removeStorageSync('reminder_grant:' + this.data.id); } catch {}
+        this.setData({ reminderUI: { eligible: false, state: 'unavailable', configured: true } });
+        wx.showToast({ title: '提醒配置异常，暂无法设置', icon: 'none' });
+      } else {
+        this.setData({ reminderUI: { eligible: true, state: 'pending', configured: true } });
+        wx.showToast({ title: '提醒保存失败，可点击重试', icon: 'none' });
+      }
     } finally { if (!inheritedBusy) this.setData({ reminderBusy: false }); }
   },
   cancelReminder() {
@@ -133,7 +143,7 @@ Page({
       this.setData({ reminderBusy: true });
       try {
         await request('/v1/capsules/' + this.data.id + '/reminder', 'DELETE');
-        wx.removeStorageSync('reminder_grant:' + this.data.id);
+        try { wx.removeStorageSync('reminder_grant:' + this.data.id); } catch {}
         track('reminder_cancel', { capsule_id: this.data.id });
         await this.load(true, true);
       } catch { wx.showToast({ title: '取消失败，请稍后重试', icon: 'none' }); }

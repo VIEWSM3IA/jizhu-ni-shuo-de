@@ -253,6 +253,92 @@ test('detail reminder grant persists across retry and reject never posts', async
   }
 });
 
+test('detail reminder retry distinguishes terminal errors and cancellation survives storage failure', async () => {
+  const apiPath = require.resolve('../miniapp/services/api');
+  const detailPath = require.resolve('../miniapp/pages/capsule/detail.js');
+  const config = require('../miniapp/config');
+  require(apiPath);
+  const oldApi = require.cache[apiPath].exports;
+  const oldTemplate = config.reminderTemplateId;
+  const oldPage = global.Page, oldWx = global.wx;
+  const grantKey = 'reminder_grant:123e4567-e89b-42d3-a456-426614174000';
+  const store = new Map(), toasts = [], tracks = [];
+  let pageDef, error, subscribeCalls = 0, postCalls = 0, deleteCalls = 0;
+  let removeThrows = false, modalPromise;
+  try {
+    require.cache[apiPath].exports = {
+      request: async (_path, method) => {
+        if (method === 'POST') { postCalls++; throw error; }
+        if (method === 'DELETE') { deleteCalls++; return {}; }
+        throw new Error('unexpected request');
+      },
+      track: name => tracks.push(name)
+    };
+    config.reminderTemplateId = 'test-template';
+    global.Page = definition => { pageDef = definition; };
+    global.wx = {
+      requestSubscribeMessage() { subscribeCalls++; },
+      getStorageSync: key => store.get(key),
+      removeStorageSync(key) {
+        if (removeThrows) throw new Error('storage unavailable');
+        store.delete(key);
+      },
+      showToast: value => toasts.push(value.title),
+      showModal: ({ success }) => { modalPromise = success({ confirm: true }); }
+    };
+    delete require.cache[detailPath];
+    require(detailPath);
+    const makePage = () => {
+      const page = Object.assign({}, pageDef);
+      page.data = { id: '123e4567-e89b-42d3-a456-426614174000',
+        reminderUI: { eligible: true, state: 'pending', configured: true }, reminderBusy: false };
+      page.setData = patch => Object.assign(page.data, patch);
+      page.loads = 0;
+      page.load = async () => { page.loads++; page.data.reminderUI = { eligible: true, state: 'none', configured: true }; };
+      return page;
+    };
+    const cases = [
+      { error: new Error('timeout'), retained: true, state: 'pending', loads: 0 },
+      { error: Object.assign(new Error('503'), { status: 503 }), retained: true, state: 'pending', loads: 0 },
+      { error: Object.assign(new Error('ineligible'), { code: 'REMINDER_NOT_ELIGIBLE' }), retained: false, state: 'none', loads: 1 },
+      { error: Object.assign(new Error('mismatch'), { code: 'REMINDER_TEMPLATE_MISMATCH' }), retained: false, state: 'unavailable', loads: 0 },
+      { error: Object.assign(new Error('sent'), { code: 'REMINDER_ALREADY_SENT' }), retained: false, state: 'none', loads: 1 },
+      { error: Object.assign(new Error('timezone'), { code: 'INVALID_TIMEZONE' }), retained: false, state: 'unavailable', loads: 0 }
+    ];
+    for (const scenario of cases) {
+      store.set(grantKey, { template_id: 'test-template', granted_at: Date.now() });
+      error = scenario.error;
+      const page = makePage();
+      await page.retryReminder();
+      assert.equal(store.has(grantKey), scenario.retained, scenario.error.message);
+      assert.equal(page.data.reminderUI.state, scenario.state, scenario.error.message);
+      assert.equal(page.loads, scenario.loads, scenario.error.message);
+      assert.equal(subscribeCalls, 0);
+    }
+    assert.equal(postCalls, cases.length);
+    assert.ok(toasts.includes('提醒配置异常，暂无法设置'));
+
+    const cancelled = makePage();
+    cancelled.data.reminderUI.state = 'armed';
+    removeThrows = true;
+    const previousToasts = toasts.length;
+    cancelled.cancelReminder();
+    await modalPromise;
+    assert.equal(deleteCalls, 1);
+    assert.equal(cancelled.loads, 1);
+    assert.equal(cancelled.data.reminderUI.state, 'none');
+    assert.equal(cancelled.data.reminderBusy, false);
+    assert.ok(tracks.includes('reminder_cancel'));
+    assert.equal(toasts.length, previousToasts);
+  } finally {
+    require.cache[apiPath].exports = oldApi;
+    config.reminderTemplateId = oldTemplate;
+    delete require.cache[detailPath];
+    if (oldPage === undefined) delete global.Page; else global.Page = oldPage;
+    if (oldWx === undefined) delete global.wx; else global.wx = oldWx;
+  }
+});
+
 test('detail reminder deep link recovery and home due banner', async () => {
   const apiId = require.resolve('../miniapp/services/api');
   const detailId = require.resolve('../miniapp/pages/capsule/detail');

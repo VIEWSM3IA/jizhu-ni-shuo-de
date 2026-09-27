@@ -370,6 +370,96 @@ test('reminder worker send, retry, terminal failure', async () => {
   }
 });
 
+test('reminder worker claims batches across concurrent workers and isolates send failures', async () => {
+  const oldClock = clock;
+  const creator = await service.authenticate(tokens.creator);
+  const ids = Array.from({ length: 21 }, () => randomUUID());
+  const withTimeout = (promise, label) => {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`timeout waiting for ${label}`)), 2000);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  };
+  let releaseSends, firstWaveStarted, sendsStarted;
+  const held = new Promise(resolve => { releaseSends = resolve; });
+  const firstWave = new Promise(resolve => { firstWaveStarted = resolve; });
+  const started = new Promise(resolve => { sendsStarted = resolve; });
+  const sent = new Map();
+  let active = 0, maxActive = 0, tickA, tickB;
+  try {
+    for (const id of ids) {
+      await pool.query(
+        `INSERT INTO capsules(id,creator_user_id,creator_alias_snapshot,statement,opens_at,status,client_request_id)
+         VALUES($1,$2,'阿杰','批量提醒测试',$3,'sealed',$4)`,
+        [id, creator.id, clock, `batch-${id}`]
+      );
+      await pool.query(
+        `INSERT INTO capsule_reminders(id,capsule_id,user_id,template_id,status,send_after,expires_at)
+         VALUES($1,$2,$3,'test-template','pending',$4,$5)`,
+        [randomUUID(), id, creator.id, clock, new Date(clock.getTime() + 86400000)]
+      );
+    }
+    const send = async ({ capsuleId }) => {
+      sent.set(capsuleId, (sent.get(capsuleId) || 0) + 1);
+      active++;
+      maxActive = Math.max(maxActive, active);
+      if (sent.size >= 5) firstWaveStarted();
+      if (sent.size >= 6) sendsStarted();
+      try {
+        await held;
+        if (capsuleId === ids[0] || capsuleId === ids[1]) {
+          const error = new Error('provider failure');
+          error.code = capsuleId === ids[0] ? 'TEMP' : 'FINAL';
+          error.terminal = capsuleId === ids[1];
+          throw error;
+        }
+      } finally { active--; }
+    };
+    const workerA = createReminderWorker(pool, { now: () => clock, send });
+    const workerB = createReminderWorker(pool, { now: () => clock, send });
+    tickA = workerA.tick();
+    await withTimeout(firstWave, 'first 5 sends');
+    const firstClaim = await pool.query(
+      `SELECT status FROM capsule_reminders WHERE capsule_id=ANY($1::uuid[])`, [ids]
+    );
+    assert.equal(firstClaim.rows.filter(row => row.status === 'sending').length, 20);
+    assert.equal(firstClaim.rows.filter(row => row.status === 'pending').length, 1);
+    tickB = workerB.tick();
+    await withTimeout(started, '6th send');
+    const claimed = await pool.query(
+      `SELECT capsule_id,status,attempt_count,lease_token,lease_until
+       FROM capsule_reminders WHERE capsule_id=ANY($1::uuid[])`, [ids]
+    );
+    assert.equal(claimed.rows.length, 21);
+    assert.ok(claimed.rows.every(row => row.status === 'sending' && row.attempt_count === 1));
+    assert.equal(new Set(claimed.rows.map(row => row.lease_token)).size, 21);
+    assert.ok(claimed.rows.every(row => new Date(row.lease_until) > clock));
+    releaseSends();
+    await Promise.all([tickA, tickB]);
+    const final = await pool.query(
+      `SELECT capsule_id,status,attempt_count,last_error_code
+       FROM capsule_reminders WHERE capsule_id=ANY($1::uuid[])`, [ids]
+    );
+    const byId = new Map(final.rows.map(row => [row.capsule_id, row]));
+    assert.equal(byId.get(ids[0]).status, 'pending');
+    assert.equal(byId.get(ids[0]).last_error_code, 'TEMP');
+    assert.equal(byId.get(ids[1]).status, 'failed');
+    assert.equal(byId.get(ids[1]).last_error_code, 'FINAL');
+    assert.ok(ids.slice(2).every(id => byId.get(id).status === 'sent'));
+    assert.ok(final.rows.every(row => row.attempt_count === 1));
+    assert.ok(ids.every(id => sent.get(id) === 1));
+    assert.ok(maxActive <= 10);
+  } finally {
+    releaseSends();
+    await Promise.allSettled([tickA, tickB].filter(Boolean));
+    await pool.query('DELETE FROM capsule_reminders WHERE capsule_id=ANY($1::uuid[])', [ids]);
+    await pool.query('DELETE FROM analytics_events WHERE capsule_id=ANY($1::uuid[])', [ids]);
+    await pool.query('DELETE FROM capsules WHERE id=ANY($1::uuid[])', [ids]);
+    clock = oldClock;
+  }
+});
+
 const { randomUUID } = require('crypto');
 const { createReminderWorker } = require('../server/reminders/worker');
 
