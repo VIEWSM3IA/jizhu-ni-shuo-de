@@ -8,6 +8,11 @@
     <view class="divider"></view>
     <block wx:if="{{capsule.state==='JOINABLE' || capsule.state==='SEALED'}}"><view class="count">已有 {{capsule.participant_count}} 人押话</view><view class="hint">截止前不显示任何人的选择。</view></block>
     <view wx:if="{{capsule.state==='SEALED'}}" class="sealed"><view class="seal-icon">✓</view><view><view class="sealed-title">你的选择已封存</view><view class="hint">你押了：{{capsule.viewer.my_stance==='agree'?'同意':'反对'}}</view><view class="hint">到开封前，其他人的选择不会公开。</view></view></view>
+    <view wx:if="{{capsule.state==='SEALED' && reminderUI && reminderUI.eligible && reminderUI.configured}}" class="reminder">
+      <block wx:if="{{reminderUI.state==='none'}}"><button class="reminder-btn" disabled="{{reminderBusy}}" bindtap="requestReminder">🔔 到期提醒我</button><view class="reminder-help">到时间时，微信只提醒这一次。</view></block>
+      <block wx:elif="{{reminderUI.state==='pending'}}"><view class="reminder-pending">提醒授权已获得，设置还没保存</view><view class="reminder-help">已获得微信授权，再试一次即可。</view><button class="reminder-retry" disabled="{{reminderBusy}}" bindtap="retryReminder">{{reminderBusy?'正在设置…':'重试设置'}}</button></block>
+      <block wx:elif="{{reminderUI.state==='armed'}}"><view class="reminder-armed">✓ 已设到期提醒</view><view class="reminder-help">到时间时通过微信服务通知提醒你。</view><button class="reminder-cancel" disabled="{{reminderBusy}}" bindtap="cancelReminder">取消</button></block>
+    </view>
     <block wx:if="{{capsule.state==='DUE'}}"><view class="due-title">当时共 {{capsule.participant_count}} 人押话</view><view class="hint">{{capsule.viewer.is_participant?'你参与过这次押话，现在任何参与者都可以开封。':'这次你没押话，结果只对参与者开放。'}}</view></block>
     <block wx:if="{{capsule.state==='OPENED'}}"><view wx:if="{{capsule.viewer.is_participant}}"><view class="count">那天大家是这么说的</view><view class="results"><view wx:for="{{capsule.results}}" wx:key="id" class="result"><view class="avatar">{{item.avatar}}</view><view class="person">{{item.alias}} <text wx:if="{{item.is_creator}}" class="badge">发起人</text></view><view class="stance {{item.stance}}">{{item.label}}</view></view></view></view><view wx:else class="hint">已开封 · 结果仅参与者可见</view></block>
     <view wx:if="{{error}}" class="error">{{error}}</view>
