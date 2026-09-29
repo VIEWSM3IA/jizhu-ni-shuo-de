@@ -60,6 +60,7 @@ function createService(pool, { checkContent, now = () => new Date() }) {
       opens_at: iso(c.opens_at), created_at: iso(c.created_at), participant_count: c.participant_count, state,
       viewer: { is_creator: c.creator_user_id === user.id, is_participant: participant,
         my_stance: participant ? (c.my_stance ? 'agree' : 'disagree') : null } };
+    if (state === 'OPENED') dto.opened_at = iso(c.opened_at);
     const reminder = (await db.query('SELECT status FROM capsule_reminders WHERE capsule_id=$1 AND user_id=$2', [id, user.id])).rows[0];
     dto.viewer.reminder = {
       eligible: participant && state === 'SEALED' && now() < c.opens_at,
@@ -220,11 +221,11 @@ function createService(pool, { checkContent, now = () => new Date() }) {
     const page = filtered.slice(start, start + 20);
     return { items: page.map(({sort_time,...item}) => item), next_cursor: filtered.length > start+20 ? page.at(-1).id : null, summary };
   }
-  const allowedEvents = new Set(['home_view','create_sheet_open','create_submit','create_success','share_intent','capsule_view','stance_tap','alias_sheet_view','alias_submit','stance_success','due_view','open_tap','open_success','opened_view','opened_share_intent','capsule_cancel','reminder_cta_view','reminder_cta_tap','reminder_permission_result','reminder_arm_success','reminder_arm_retry','reminder_cancel','reminder_entry_view']);
+  const allowedEvents = new Set(['home_view','create_sheet_open','create_submit','create_success','share_intent','capsule_view','stance_tap','alias_sheet_view','alias_submit','stance_success','due_view','open_tap','open_success','opened_view','opened_share_intent','result_share_entry','create_from_opened','capsule_cancel','reminder_cta_view','reminder_cta_tap','reminder_permission_result','reminder_arm_success','reminder_arm_retry','reminder_cancel','reminder_entry_view']);
   const analyticsPropertyValues = {
     viewer_role: new Set(['creator','participant','visitor']),
     capsule_state: new Set(['JOINABLE','SEALED','DUE','OPENED','INVALID']),
-    entry_source: new Set(['share','home','direct','reminder']),
+    entry_source: new Set(['share','home','direct','reminder','result_share']),
     permission_result: new Set(['accept','acceptWithAudio','reject','ban','filter','error']),
     reminder_state: new Set(['none','armed','sent'])
   };

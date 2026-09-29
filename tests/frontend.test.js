@@ -1,5 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const { customIso, canChooseTonight, dueRefreshDelay, graphemeCount } = require('../miniapp/services/time');
 
 function component(path) {
@@ -416,4 +417,123 @@ test('detail reminder deep link recovery and home due banner', async () => {
     global.wx = oldWx;
     global.getCurrentPages = oldPages;
   }
+});
+
+test('V0.3 result-share entry, OPENED share and create CTA preserve visitor privacy', async () => {
+  const apiPath = require.resolve('../miniapp/services/api');
+  const detailPath = require.resolve('../miniapp/pages/capsule/detail.js');
+  require(apiPath);
+  const oldApi = require.cache[apiPath].exports;
+  const oldPage = global.Page, oldWx = global.wx, oldPages = global.getCurrentPages;
+  const id = '123e4567-e89b-42d3-a456-426614174000';
+  const tracks = [], launches = [];
+  let definition, dto;
+  try {
+    require.cache[apiPath].exports = {
+      request: async path => { assert.equal(path, `/v1/capsules/${id}`); return structuredClone(dto); },
+      track: (name, props) => tracks.push({ name, props })
+    };
+    global.Page = value => { definition = value; };
+    global.getCurrentPages = () => [{}];
+    global.wx = { getStorageSync() {}, removeStorageSync() {}, reLaunch(value) { launches.push(value); } };
+    delete require.cache[detailPath];
+    require(detailPath);
+    const makePage = () => Object.assign({}, definition, {
+      data: structuredClone(definition.data),
+      setData(patch, callback) { Object.assign(this.data, patch); if (callback) callback(); }
+    });
+    dto = {
+      id, statement: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890TAIL', creator_alias: '阿杰',
+      opens_at: '2026-09-26T11:00:00.000Z', opened_at: '2026-09-26T11:02:03.000Z', state: 'OPENED',
+      viewer: { is_creator: true, is_participant: true, reminder: { eligible: false, state: 'none' } },
+      results: [
+        { id: 'a', alias: '阿杰', stance: 'agree', is_creator: true },
+        { id: 'b', alias: '小明', stance: 'disagree', is_creator: false }
+      ]
+    };
+    const opened = makePage();
+    opened.onLoad({ id, src: 'result_share' });
+    await opened.loadPromise;
+    assert.equal(opened.data.entry, 'result_share');
+    assert.equal(opened.data.capsule.openedTimeText, require('../miniapp/services/util').formatDate(dto.opened_at));
+    assert.deepEqual(opened.data.capsule.results.map(r => r.label), ['同意', '反对']);
+    assert.deepEqual(tracks.find(x => x.name === 'result_share_entry'), {
+      name: 'result_share_entry', props: { capsule_id: id, entry_source: 'result_share' }
+    });
+    assert.equal(tracks.find(x => x.name === 'capsule_view').props.entry_source, 'result_share');
+    const share = opened.onShareAppMessage();
+    assert.equal(share.path, `/pages/capsule/detail?id=${id}&src=result_share`);
+    assert.equal(share.title, '「ABCDEFGHIJKLMNOPQR…」——那天大家是这么说的');
+    assert.ok([...share.title].length <= 32);
+    assert.equal(tracks.filter(x => x.name === 'opened_share_intent').length, 1);
+    opened.createAgain();
+    assert.deepEqual(launches.at(-1), { url: '/pages/home/index?create=1' });
+    assert.deepEqual(tracks.find(x => x.name === 'create_from_opened'), {
+      name: 'create_from_opened', props: { capsule_id: id, entry_source: 'result_share' }
+    });
+    const familyTitle = require('../miniapp/services/util').resultShareTitle({ statement: '123456789012345👨‍👩‍👧‍👦后面的文字足够长触发截断' });
+    assert.ok((familyTitle.includes('👨‍👩‍👧‍👦') || !familyTitle.includes('👨')) && [...familyTitle].length <= 32);
+
+    dto = { ...dto, viewer: { is_creator: false, is_participant: false, reminder: { eligible: false, state: 'none' } } };
+    delete dto.results;
+    const visitor = makePage();
+    visitor.onLoad({ id, src: 'result_share' });
+    await visitor.loadPromise;
+    assert.equal(visitor.data.capsule.results, undefined);
+    assert.equal(visitor.data.capsule.openedTimeText, require('../miniapp/services/util').formatDate(dto.opened_at));
+    opened.onUnload(); visitor.onUnload();
+
+    global.getCurrentPages = () => [{}, {}];
+    const homeOpened = makePage();
+    homeOpened.onLoad({ id });
+    await homeOpened.loadPromise;
+    homeOpened.createAgain();
+    assert.deepEqual(tracks.filter(x => x.name === 'create_from_opened').at(-1).props, { capsule_id: id, entry_source: 'home' });
+    homeOpened.onUnload();
+
+    dto = { ...dto, state: 'SEALED' };
+    const sealed = makePage();
+    sealed.onLoad({ id, src: 'reminder' });
+    await sealed.loadPromise;
+    assert.equal(sealed.data.entry, 'reminder');
+    assert.ok(tracks.some(x => x.name === 'reminder_entry_view' && x.props.entry_source === 'reminder'));
+    const sealedShare = sealed.onShareAppMessage();
+    assert.equal(sealedShare.title, require('../miniapp/services/util').shareTitle(dto));
+    assert.equal(sealedShare.path, `/pages/capsule/detail?id=${id}`);
+    sealed.onUnload();
+  } finally {
+    require.cache[apiPath].exports = oldApi;
+    delete require.cache[detailPath];
+    if (oldPage === undefined) delete global.Page; else global.Page = oldPage;
+    if (oldWx === undefined) delete global.wx; else global.wx = oldWx;
+    if (oldPages === undefined) delete global.getCurrentPages; else global.getCurrentPages = oldPages;
+  }
+});
+
+test('V0.3 result and Home copy stays behind the OPENED conditions', () => {
+  const detail = fs.readFileSync('miniapp/pages/capsule/detail.wxml', 'utf8');
+  const home = fs.readFileSync('miniapp/pages/home/index.wxml', 'utf8');
+  assert.match(detail, /那天大家是这么说的/);
+  assert.match(detail, /这句话已经开封/);
+  assert.match(detail, /只有当时参与押话的人能看到完整结果/);
+  assert.match(detail, /分享给朋友看看/);
+  assert.match(detail, /我也记一句/);
+  assert.match(detail, /wx:if="\{\{capsule.viewer.is_participant\}\}"/);
+  assert.match(detail, /wx:for="\{\{capsule.results\}\}"/);
+  assert.match(home, /wx:if="\{\{item.state==='OPENED'\}\}" class="opened-hint">那天大家是这么说的 →/);
+});
+
+test('result share title fallback keeps composed characters whole', () => {
+  const { resultShareTitle } = require('../miniapp/services/util');
+  const originalSegmenter = Intl.Segmenter;
+  try {
+    Intl.Segmenter = undefined;
+    for (const [grapheme, fragment] of [
+      ['👍🏽', '👍'], ['é', 'e'], ['👨‍👩‍👧‍👦', '👨'], ['🇨🇳', '🇨'], ['कि', 'क']
+    ]) {
+      const title = resultShareTitle({ statement: 'A'.repeat(17) + grapheme + '后面的字足够长触发截断' });
+      assert.equal(title.includes(fragment), false);
+      assert.ok([...title].length <= 32);
+    }
+  } finally { Intl.Segmenter = originalSegmenter; }
 });
