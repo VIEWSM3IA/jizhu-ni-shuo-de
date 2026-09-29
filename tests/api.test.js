@@ -175,7 +175,7 @@ test('cancel and join racing cannot leave a cancelled capsule with a second part
     (row.status === 'sealed' && row.count === 2 && cancel.status === 409 && join.status === 200));
 });
 
-test('home prioritizes due records and analytics drops free text', async () => {
+test('home prioritizes due records and analytics keeps only safe property enums', async () => {
   const due = await request('/v1/capsules', 'POST', { ...createBody('due-sort-request-12345'), opens_at: new Date(clock.getTime()+600000).toISOString() }, tokens.creator);
   await request('/v1/capsules', 'POST', createBody('active-sort-request-12345'), tokens.creator);
   clock = new Date(clock.getTime()+600000);
@@ -184,10 +184,21 @@ test('home prioritizes due records and analytics drops free text', async () => {
   assert.equal(home.data.items[0].state, 'DUE');
   const filtered = await request('/v1/me/capsules?state=DUE', 'GET', undefined, tokens.creator);
   assert.ok(filtered.data.items.every(item => item.state === 'DUE'));
-  const event = await request('/v1/events', 'POST', { name: 'home_view', capsule_id: due.data.id, statement: '敏感原话', alias: '秘密称呼', entry_source: 'home' }, tokens.creator);
-  assert.equal(event.status, 200);
-  const props = (await pool.query("SELECT properties FROM analytics_events WHERE name='home_view' ORDER BY id DESC LIMIT 1")).rows[0].properties;
-  assert.deepEqual(props, { entry_source: 'home' });
+  const unsafe = await request('/v1/events', 'POST', {
+    name: 'home_view', capsule_id: due.data.id, statement: '敏感原话', alias: '秘密称呼',
+    entry_source: '敏感原话', app_version: '秘密称呼'
+  }, tokens.creator);
+  assert.equal(unsafe.status, 200);
+  const unsafeProps = (await pool.query("SELECT properties FROM analytics_events WHERE name='home_view' AND capsule_id=$1 ORDER BY id DESC LIMIT 1", [due.data.id])).rows[0].properties;
+  assert.deepEqual(unsafeProps, {});
+
+  const safe = await request('/v1/events', 'POST', {
+    name: 'reminder_entry_view', capsule_id: due.data.id, entry_source: 'reminder', capsule_state: 'DUE', viewer_role: 'participant',
+    participant_count_bucket: '秘密称呼'
+  }, tokens.creator);
+  assert.equal(safe.status, 200);
+  const safeProps = (await pool.query("SELECT properties FROM analytics_events WHERE name='reminder_entry_view' AND capsule_id=$1 ORDER BY id DESC LIMIT 1", [due.data.id])).rows[0].properties;
+  assert.deepEqual(safeProps, { entry_source: 'reminder', capsule_state: 'DUE', viewer_role: 'participant' });
 });
 
 test('reminder API lifecycle, linkage, due boundary and list summary', async () => {

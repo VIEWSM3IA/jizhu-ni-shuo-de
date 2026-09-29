@@ -221,14 +221,19 @@ function createService(pool, { checkContent, now = () => new Date() }) {
     return { items: page.map(({sort_time,...item}) => item), next_cursor: filtered.length > start+20 ? page.at(-1).id : null, summary };
   }
   const allowedEvents = new Set(['home_view','create_sheet_open','create_submit','create_success','share_intent','capsule_view','stance_tap','alias_sheet_view','alias_submit','stance_success','due_view','open_tap','open_success','opened_view','opened_share_intent','capsule_cancel','reminder_cta_view','reminder_cta_tap','reminder_permission_result','reminder_arm_success','reminder_arm_retry','reminder_cancel','reminder_entry_view']);
+  const analyticsPropertyValues = {
+    viewer_role: new Set(['creator','participant','visitor']),
+    capsule_state: new Set(['JOINABLE','SEALED','DUE','OPENED','INVALID']),
+    entry_source: new Set(['share','home','direct','reminder']),
+    permission_result: new Set(['accept','acceptWithAudio','reject','ban','filter','error']),
+    reminder_state: new Set(['none','armed','sent'])
+  };
   async function event(user, body) {
     if (!allowedEvents.has(body.name)) fail(400, 'INVALID_EVENT', '事件无效。');
     const props = {};
-    for (const key of ['viewer_role','capsule_state','entry_source','participant_count_bucket','time_to_open_bucket','client_platform','app_version']) {
-      if (typeof body[key] === 'string') props[key] = body[key].slice(0, 32);
+    for (const [key, values] of Object.entries(analyticsPropertyValues)) {
+      if (typeof body[key] === 'string' && values.has(body[key])) props[key] = body[key];
     }
-    if (['accept','acceptWithAudio','reject','ban','filter','error'].includes(body.permission_result)) props.permission_result = body.permission_result;
-    if (['none','armed','sent'].includes(body.reminder_state)) props.reminder_state = body.reminder_state;
     await pool.query('INSERT INTO analytics_events(user_id,capsule_id,name,properties) VALUES($1,$2,$3,$4)', [user.id, uuid(body.capsule_id) ? body.capsule_id : null, body.name, props]);
     return { ok: true };
   }
