@@ -131,6 +131,22 @@ test('concurrent open returns the same participant-only result and home updates'
   assert.ok(!JSON.stringify(home.data).includes('openid'));
 });
 
+test('OPENED detail exposes stable opened_at without exposing visitor results', async () => {
+  const id = global.capsuleId;
+  const openedAt = (await pool.query('SELECT opened_at FROM capsules WHERE id=$1', [id])).rows[0].opened_at.toISOString();
+  const participant = await request(`/v1/capsules/${id}`, 'GET', undefined, tokens.creator);
+  const visitor = await request(`/v1/capsules/${id}`, 'GET', undefined, tokens.visitor);
+  const repeated = await request(`/v1/capsules/${id}`, 'GET', undefined, tokens.creator);
+  assert.equal(participant.status, 200);
+  assert.equal(participant.data.opened_at, openedAt);
+  assert.ok(Array.isArray(participant.data.results));
+  assert.equal(visitor.status, 200);
+  assert.equal(visitor.data.opened_at, openedAt);
+  assert.equal(visitor.data.results, undefined);
+  assert.ok(!JSON.stringify(visitor.data).includes('小明'));
+  assert.equal(repeated.data.opened_at, openedAt);
+});
+
 test('cancellation, invalid links, report and auth boundaries', async () => {
   const created = await request('/v1/capsules', 'POST', createBody('cancel-me-request-12345'), tokens.creator);
   const id = created.data.id;
@@ -199,6 +215,25 @@ test('home prioritizes due records and analytics keeps only safe property enums'
   assert.equal(safe.status, 200);
   const safeProps = (await pool.query("SELECT properties FROM analytics_events WHERE name='reminder_entry_view' AND capsule_id=$1 ORDER BY id DESC LIMIT 1", [due.data.id])).rows[0].properties;
   assert.deepEqual(safeProps, { entry_source: 'reminder', capsule_state: 'DUE', viewer_role: 'participant' });
+});
+
+test('V0.3 analytics accepts result-share events and drops sensitive fields', async () => {
+  const id = global.capsuleId;
+  const entry = await request('/v1/events', 'POST', {
+    name: 'result_share_entry', capsule_id: id, entry_source: 'result_share',
+    statement: '绝不能保存的原话', alias: '秘密称呼', stance: 'disagree', openid: 'sensitive-openid'
+  }, tokens.visitor);
+  assert.equal(entry.status, 200);
+  const entryProps = (await pool.query("SELECT properties FROM analytics_events WHERE name='result_share_entry' AND capsule_id=$1 ORDER BY id DESC LIMIT 1", [id])).rows[0].properties;
+  assert.deepEqual(entryProps, { entry_source: 'result_share' });
+
+  const create = await request('/v1/events', 'POST', {
+    name: 'create_from_opened', capsule_id: id, entry_source: 'result_share',
+    statement: '恶意内容', alias: '恶意别名', stance: 'agree', openid: 'bad-openid'
+  }, tokens.creator);
+  assert.equal(create.status, 200);
+  const createProps = (await pool.query("SELECT properties FROM analytics_events WHERE name='create_from_opened' AND capsule_id=$1 ORDER BY id DESC LIMIT 1", [id])).rows[0].properties;
+  assert.deepEqual(createProps, { entry_source: 'result_share' });
 });
 
 test('reminder API lifecycle, linkage, due boundary and list summary', async () => {

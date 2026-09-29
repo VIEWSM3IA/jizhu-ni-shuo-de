@@ -1,14 +1,15 @@
 const { request, track } = require('../../services/api');
-const { formatDate, shareTitle } = require('../../services/util');
+const { formatDate, shareTitle, resultShareTitle } = require('../../services/util');
 const { dueRefreshDelay } = require('../../services/time');
 const { reminderTemplateId } = require('../../config');
 Page({
   data: { id: '', capsule: null, loading: true, busy: false, error: '', aliasOpen: false, aliasError: '', pendingStance: '', entry: 'direct', canGoBack: false, reminderBusy: false, reminderUI: null },
   onLoad(options) {
     this.pageVisible = true;
-    const entry = options.src === 'reminder' ? 'reminder' : getCurrentPages().length === 1 ? 'share' : 'home';
+    const entry = options.src === 'reminder' ? 'reminder' : options.src === 'result_share' ? 'result_share' : getCurrentPages().length === 1 ? 'share' : 'home';
     this.setData({ id: options.id || '', entry, canGoBack: getCurrentPages().length > 1 });
     if (entry === 'reminder') track('reminder_entry_view', { capsule_id: this.data.id, entry_source: 'reminder' });
+    if (entry === 'result_share') track('result_share_entry', { capsule_id: this.data.id, entry_source: 'result_share' });
     this.load();
   },
   onShow() {
@@ -47,6 +48,7 @@ Page({
       const c = await request(`/v1/capsules/${encodeURIComponent(this.data.id)}`);
       if (this.unloaded) return;
       c.timeText = c.opens_at ? formatDate(c.opens_at) : '';
+      c.openedTimeText = c.opened_at ? formatDate(c.opened_at) : '';
       if (c.results) c.results = c.results.map(r => ({ ...r, avatar: [...r.alias][0], label: r.stance === 'agree' ? '同意' : '反对' }));
       this.lastLoaded = Date.now();
       this.setData({ capsule: c, reminderUI: this.deriveReminderUI(c), loading: false });
@@ -212,11 +214,12 @@ Page({
     } });
   },
   goHome() { wx.reLaunch({ url: '/pages/home/index' }); },
-  createAgain() { wx.reLaunch({ url: '/pages/home/index?create=1' }); },
+  createAgain() { track('create_from_opened', { capsule_id: this.data.id, entry_source: this.data.entry }); wx.reLaunch({ url: '/pages/home/index?create=1' }); },
   onShareAppMessage() {
     const c = this.data.capsule;
     if (!c?.id) return { title: '记住你说的', path: '/pages/home/index' };
     track(c.state === 'OPENED' ? 'opened_share_intent' : 'share_intent', { capsule_id: c.id });
+    if (c.state === 'OPENED') return { title: resultShareTitle(c), path: `/pages/capsule/detail?id=${c.id}&src=result_share` };
     return { title: shareTitle(c), path: `/pages/capsule/detail?id=${c.id}` };
   }
 });
